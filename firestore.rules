@@ -1,0 +1,50 @@
+rules_version = '2';
+
+// Defense-in-depth layer behind the API's own auth + role checks.
+// The API (Cloud Run, using the Admin SDK) bypasses these rules entirely —
+// they only matter if a client ever talks to Firestore directly, which
+// Phase 0 doesn't do, but is worth locking down now rather than later.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isFamilyMember(familyId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/families/$(familyId)/members/$(request.auth.uid));
+    }
+
+    match /users/{uid} {
+      allow read, write: if isSelf(uid);
+    }
+
+    match /families/{familyId} {
+      allow read: if isFamilyMember(familyId);
+      allow write: if false; // all family mutations go through the API
+    }
+
+    match /families/{familyId}/members/{memberId} {
+      allow read: if isFamilyMember(familyId);
+      allow write: if false;
+    }
+
+    match /invites/{inviteId} {
+      allow read, write: if false; // API-only, looked up by code server-side
+    }
+
+    match /driveConnections/{uid} {
+      allow read: if isSelf(uid);
+      allow write: if false;
+    }
+
+    match /oauthStates/{state} {
+      allow read, write: if false; // API-only, short-lived
+    }
+  }
+}

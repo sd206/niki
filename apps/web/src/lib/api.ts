@@ -1,0 +1,61 @@
+/**
+ * API client — wraps all calls to the Niki API and attaches the Firebase
+ * ID token automatically.
+ *
+ * Production: Firebase Hosting rewrites /v1/** -> Cloud Run niki-api
+ * (same origin, no CORS involved at all).
+ * Development: set NEXT_PUBLIC_API_URL=http://localhost:8080/v1 in .env.local.
+ */
+import { auth } from './firebase';
+import type { Family, Member, Invite, UserProfile, DriveConnection, CreateFamilyInput, CreateInviteInput } from '@niki/shared';
+
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? '/v1';
+
+async function getToken(): Promise<string> {
+  const user = await new Promise<import('firebase/auth').User | null>((resolve) => {
+    const unsubscribe = auth.onAuthStateChanged((u) => {
+      unsubscribe();
+      resolve(u);
+    });
+  });
+  if (!user) throw new Error('Not authenticated');
+  return user.getIdToken();
+}
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const token = await getToken();
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error ?? 'API error');
+  }
+  if (res.status === 204) return undefined as T;
+  return res.json();
+}
+
+export const api = {
+  users: {
+    me: () => request<UserProfile>('GET', '/users/me'),
+  },
+  families: {
+    create: (input: CreateFamilyInput) => request<Family>('POST', '/families', input),
+    get: (familyId: string) =>
+      request<{ family: Family; members: Member[] }>('GET', `/families/${familyId}`),
+    invite: (familyId: string, input: CreateInviteInput) =>
+      request<Invite>('POST', `/families/${familyId}/invites`, input),
+    acceptInvite: (code: string) =>
+      request<Member>('POST', `/families/invites/${code}/accept`),
+  },
+  drive: {
+    status: () => request<DriveConnection>('GET', '/drive/status'),
+    connect: (redirectTo?: string) =>
+      request<{ url: string }>('POST', '/drive/connect', redirectTo ? { redirectTo } : undefined),
+  },
+};

@@ -1,0 +1,17 @@
+{
+  "name": "niki",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build:shared": "yarn workspace @niki/shared build",
+    "dev:api": "yarn workspace @niki/api dev",
+    "dev:web": "yarn workspace @niki/web dev",
+    "build:api": "yarn workspace @niki/api build",
+    "build:web": "yarn workspace @niki/web build"
+  },
+  "packageManager": "yarn@1.22.19"
+}

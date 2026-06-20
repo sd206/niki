@@ -1,0 +1,47 @@
+steps:
+  # 1. Build Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      - -t
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/niki/api:latest'
+      - -f
+      - apps/api/Dockerfile
+      - .
+
+  # 2. Push to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - push
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/niki/api:latest'
+
+  # 3. Deploy to Cloud Run — allows unauthenticated invocation because
+  #    Firebase Hosting's rewrite proxy forwards requests without any
+  #    invoker identity we can grant IAM to (there is no per-project
+  #    "Firebase Hosting" service agent for this). Security is enforced at
+  #    the app layer instead: every route requires a valid Firebase ID
+  #    token, checked in src/middleware/auth.ts. CORS plus this auth check
+  #    is the real boundary, not Cloud Run IAM.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - niki-api
+      - --image=us-central1-docker.pkg.dev/$PROJECT_ID/niki/api:latest
+      - --region=$_REGION
+      - --platform=managed
+      - --allow-unauthenticated
+      - --min-instances=0
+      - --max-instances=10
+      - --memory=512Mi
+      - --project=$PROJECT_ID
+      - --set-env-vars=FIREBASE_PROJECT_ID=$PROJECT_ID,WEB_ORIGIN=https://$_HOSTING_SITE.web.app
+      - --set-secrets=DRIVE_OAUTH_CLIENT_ID=drive-oauth-client-id:latest,DRIVE_OAUTH_CLIENT_SECRET=drive-oauth-client-secret:latest,DRIVE_OAUTH_REDIRECT_URI=drive-oauth-redirect-uri:latest
+
+substitutions:
+  _REGION: us-central1
+  _HOSTING_SITE: niki-app-d035f
+
+options:
+  logging: CLOUD_LOGGING_ONLY

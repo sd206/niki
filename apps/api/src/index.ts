@@ -14,6 +14,8 @@ import { expensesRouter } from './routes/expenses';
 import { savingsGoalsRouter } from './routes/savingsGoals';
 import { knowledgeRouter } from './routes/knowledge';
 import { memoriesRouter } from './routes/memories';
+import { searchRouter } from './routes/search';
+import { eventPlanningRouter } from './routes/eventPlanning';
 import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -63,6 +65,7 @@ app.use('/v1/users', usersRouter);
 app.use('/v1/families', familiesRouter);
 app.use('/v1/families/:familyId/tasks', tasksRouter);
 app.use('/v1/families/:familyId/events', eventsRouter);
+app.use('/v1/families/:familyId/events/:eventId/plan-assist', eventPlanningRouter);
 app.use('/v1/families/:familyId/vault', vaultRouter);
 app.use('/v1/families/:familyId/calendar', calendarRouter);
 app.use('/v1/families/:familyId/budgets', budgetsRouter);
@@ -70,6 +73,7 @@ app.use('/v1/families/:familyId/expenses', expensesRouter);
 app.use('/v1/families/:familyId/savings-goals', savingsGoalsRouter);
 app.use('/v1/families/:familyId/knowledge', knowledgeRouter);
 app.use('/v1/families/:familyId/memories', memoriesRouter);
+app.use('/v1/families/:familyId/search', searchRouter);
 app.use('/v1/drive', driveRouter);
 
 app.use((req: Request, res: Response, _next: NextFunction) => {

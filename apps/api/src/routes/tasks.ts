@@ -10,11 +10,15 @@ import { db } from '../lib/firebaseAdmin';
 import { authenticate, type AuthedRequest } from '../middleware/auth';
 import { requireFamilyRole } from '../middleware/requireFamilyRole';
 import { ApiError } from '../middleware/errorHandler';
+import { indexForSearch, removeFromSearchIndex } from '../lib/searchIndexing';
 
 /**
  * Mounted at /v1/families/:familyId/tasks (see index.ts) with
  * `{ mergeParams: true }` so req.params.familyId is visible here and to
  * requireFamilyRole(), exactly like the nested invites route in families.ts.
+ * Phase 4.A: every create/update/delete also fire-and-forget indexes (or
+ * removes) this task's embedding for semantic search, same pattern as
+ * routes/knowledge.ts.
  */
 export const tasksRouter = Router({ mergeParams: true });
 tasksRouter.use(authenticate);
@@ -67,6 +71,7 @@ tasksRouter.post('/', async (req: TaskRequest, res, next) => {
       updatedAt: now,
     };
     await taskRef.set(task);
+    indexForSearch({ type: 'task', id: task.id, familyId }, `${task.title}\n${task.description ?? ''}`);
 
     return res.status(201).json(task);
   } catch (err) {
@@ -102,7 +107,10 @@ tasksRouter.patch('/:taskId', async (req: TaskRequest, res, next) => {
     const updates = { ...input, updatedAt: new Date().toISOString() };
     await taskRef.update(updates);
 
-    return res.json({ ...task, ...updates });
+    const merged = { ...task, ...updates };
+    indexForSearch({ type: 'task', id: merged.id, familyId }, `${merged.title}\n${merged.description ?? ''}`);
+
+    return res.json(merged);
   } catch (err) {
     next(err instanceof Error ? err : new ApiError(400, 'Invalid input'));
   }
@@ -127,6 +135,7 @@ tasksRouter.delete('/:taskId', async (req: TaskRequest, res, next) => {
     }
 
     await taskRef.delete();
+    removeFromSearchIndex({ type: 'task', id: task.id });
     return res.status(204).send();
   } catch (err) {
     next(err);

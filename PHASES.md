@@ -237,17 +237,154 @@ Comes last because every prior phase's data (Vault metadata, Events, Tasks,
 Finance, Knowledge, Memories) is what the assistant searches/reasons over —
 building this earlier would mean indexing against a schema still in flux.
 
-- **4.A — Search**: natural-language query over Firestore data + Drive file
-  metadata. Needs an embeddings/vector search decision (see Stack Note
-  above) before this can start for real.
-- **4.B — Event planning assistant**: checklist/budget suggestions, using
-  Vertex AI (Gemini) against the Event Templates already modeled in 1.C
+Scoped with the user to **4.A + 4.B only** for this pass — 4.C/4.D/4.E remain
+deferred (see below).
+
+### 4.A — Search (SHIPPED)
+
+Semantic search over Knowledge Hub entries and Tasks, via **Vertex AI
+Vector Search** (Matching Engine) — chosen over Postgres/pgvector and over
+Firestore's native vector search, per explicit user decision.
+
+- **Data model**: no new Firestore collection. `packages/shared/src/ai.ts`
+  defines `SearchResult`/`SearchResponse` (id, type `'knowledge'|'task'`,
+  title, snippet, distance) — a read-only projection, not stored data.
+- **Embeddings/vector infra**:
+  `apps/api/src/lib/vertexAi.ts` (`embedText`, `generateJson` — REST calls
+  via `google-auth-library` ADC, no new SDK dependency) and
+  `apps/api/src/lib/vectorSearch.ts` (`upsertEmbedding`, `removeEmbedding`,
+  `findNeighbors` against a single shared Vector Search index, namespaced
+  by `familyId` + `type` restricts so cross-family leakage is impossible at
+  the index layer). Both gate on a `*Configured` boolean computed from env
+  vars, so the app degrades gracefully (empty results) where this infra
+  isn't provisioned — see setup steps below.
+- **Indexing**: `apps/api/src/lib/searchIndexing.ts` — fire-and-forget
+  `indexForSearch`/`removeFromSearchIndex`, called from
+  `routes/knowledge.ts` and `routes/tasks.ts` on create/update/delete.
+  Events and Memories are NOT indexed this pass (explicit scope decision —
+  extend the same pattern later if needed).
+- **API**: `GET /v1/families/:familyId/search?q=` —
+  `apps/api/src/routes/search.ts`. Embeds the query, finds nearest
+  neighbors, hydrates the matching Knowledge/Task docs, returns them
+  distance-ranked. Returns `{ results: [] }` rather than erroring if Vertex
+  AI / Vector Search aren't configured.
+- **Web UI**: `/search` — `apps/web/src/app/search/page.tsx`. Single static
+  route, same reason as `/knowledge`, `/memories`.
+
+### 4.B — Event planning assistant (SHIPPED)
+
+Gemini-generated checklist + budget draft for an event, using the event's
+`type`/title/dates/description (the same `EVENT_TEMPLATES` enum from 1.C —
+there's no separate template collection) as planning context.
+
+- **Data model**: `packages/shared/src/ai.ts` — `EventPlanDraft`
+  (`checklist: {title, description?}[]`, `budget: {category,
+  estimatedAmount, notes?}[]`). Stateless — never persisted.
+- **API**: `POST /v1/families/:familyId/events/:eventId/plan-assist` —
+  `apps/api/src/routes/eventPlanning.ts`. Calls Gemini via
+  `generateJson`, validates the response against `EventPlanDraftSchema`,
+  returns it. Returns 503 if Vertex AI isn't configured.
+- **Critical design decision (explicit, locked in with the user): always
+  draft, never auto-create.** This endpoint NEVER writes a `Task` or
+  `Budget` document. It only returns a draft for the web UI to render as a
+  reviewable list — the user must explicitly accept each item.
+- **Web UI**: `apps/web/src/app/events/page.tsx` — inside the expanded
+  event view, a "Get checklist + budget suggestions" button calls
+  plan-assist and renders the draft. Each checklist item has its own
+  "Add as task" button (calls the existing `POST /tasks`, unmodified).
+  Budget items are aggregated and offered as a single "Create event budget
+  from these suggestions" action, which best-effort maps Gemini's freeform
+  `category` strings onto the fixed `ExpenseCategory` enum (case-insensitive
+  substring match, falling back to `'other'`) before calling the existing
+  `POST /budgets` with `period: 'event'`.
+
+### GCP setup for 4.A/4.B (do this before either feature does anything beyond
+returning empty/503)
+
+1. **Enable the API** (one-time per project):
+   ```
+   gcloud services enable aiplatform.googleapis.com --project=<PROJECT_ID>
+   ```
+2. **Grant the existing API service account Vertex AI access** — reuse the
+   same service account `apps/api`'s Cloud Run service already runs as
+   (see `SETUP.md` for which one that is):
+   ```
+   gcloud projects add-iam-policy-binding <PROJECT_ID> \
+     --member="serviceAccount:<API_SERVICE_ACCOUNT_EMAIL>" \
+     --role="roles/aiplatform.user"
+   ```
+3. **Create a Vector Search index** (embedding dimension 768 to match
+   `text-embedding-004`; adjust if you pick a different embedding model):
+   ```
+   gcloud ai indexes create \
+     --display-name=niki-search-index \
+     --project=<PROJECT_ID> --region=us-central1 \
+     --metadata-file=index_metadata.json
+   ```
+   where `index_metadata.json` is:
+   ```json
+   {
+     "contentsDeltaUri": "",
+     "config": {
+       "dimensions": 768,
+       "approximateNeighborsCount": 10,
+       "distanceMeasureType": "COSINE_DISTANCE",
+       "algorithmConfig": { "treeAhConfig": {} }
+     }
+   }
+   ```
+   (Console UI is simpler for this one-time step if you'd rather avoid
+   hand-rolling the metadata file: Vertex AI → Vector Search → Create
+   Index → Update method "Streaming".) **Streaming update method is
+   required** — this app calls `upsertDatapoints`/`removeDatapoints`
+   directly, not batch updates.
+4. **Create an Index Endpoint and deploy the index to it**:
+   ```
+   gcloud ai index-endpoints create \
+     --display-name=niki-search-endpoint \
+     --project=<PROJECT_ID> --region=us-central1 \
+     --public-endpoint-enabled
+
+   gcloud ai index-endpoints deploy-index <INDEX_ENDPOINT_ID> \
+     --index=<INDEX_ID> \
+     --deployed-index-id=niki_search_deployed \
+     --display-name=niki-search-deployed \
+     --project=<PROJECT_ID> --region=us-central1
+   ```
+   Deployment takes ~20-30 minutes the first time.
+5. **Set these env vars on the API's Cloud Run service** (Secret Manager
+   not required — none of these are secrets, just config):
+   - `GOOGLE_CLOUD_PROJECT` (or reuse existing `FIREBASE_PROJECT_ID` if
+     it's the same project — the code falls back to that)
+   - `VERTEX_AI_LOCATION` (defaults to `us-central1` if unset)
+   - `VERTEX_AI_EMBEDDING_MODEL` (defaults to `text-embedding-004`)
+   - `VERTEX_AI_GEMINI_MODEL` (defaults to `gemini-1.5-flash`)
+   - `VECTOR_SEARCH_INDEX_ID` (the `<INDEX_ID>` from step 3)
+   - `VECTOR_SEARCH_INDEX_ENDPOINT_ID` (the `<INDEX_ENDPOINT_ID>` from
+     step 4)
+   - `VECTOR_SEARCH_DEPLOYED_INDEX_ID` (`niki_search_deployed`, matching
+     the `--deployed-index-id` used in step 4)
+6. **Backfill existing data** (optional, one-time): existing Knowledge
+   entries and Tasks created before this phase was deployed won't be
+   indexed automatically — only future creates/updates trigger indexing.
+   If you want existing content searchable immediately, the simplest
+   backfill is a one-off script that lists every `families/*/knowledge` and
+   `families/*/tasks` doc and calls the same `indexForSearch` logic; not
+   built this pass since it's a one-time operational task, not app code.
+
+Until steps 1-5 are done, `/search` returns empty results (not an error)
+and the events page's "Get suggestions" button surfaces a clear 503 error
+message — both fail soft by design.
+
 - **4.C — Financial coaching**: overspending alerts, savings recommendations
-  — depends on Phase 2.B Finance data existing first
-- **4.D — Knowledge search & summarization**: depends on Phase 3.A
+  — depends on Phase 2.B Finance data existing first. Deferred.
+- **4.D — Knowledge search & summarization**: superseded in part by 4.A
+  (Knowledge entries are now semantically searchable); summarization
+  specifically remains deferred.
 - **4.E — Security monitoring**: permission review, sensitive-document
   detection — depends on Vault's deferred security tiers (1.D) actually
-  being built first, so likely re-sequences after a Vault hardening pass
+  being built first, so likely re-sequences after a Vault hardening pass.
+  Deferred.
 
 ---
 
@@ -257,6 +394,7 @@ building this earlier would mean indexing against a schema still in flux.
   MVP-vs-full-depth per module
 - **Phase 2.B**: resolved — manual entry (2.B.1) shipped first; receipt OCR
   (2.B.2) and voice input (2.B.3) deferred to separate follow-up milestones
-- **Phase 4.A**: pick the vector search approach (Postgres+pgvector as a
-  second datastore vs. Vertex AI Vector Search vs. a Firestore extension)
-  before any embedding-generation code gets written
+- **Phase 4.A**: resolved — Vertex AI Vector Search chosen over
+  Postgres+pgvector and Firestore's native vector search; shipped indexing
+  Knowledge entries + Tasks only (Events/Memories deferred to a later
+  extension of the same pattern)

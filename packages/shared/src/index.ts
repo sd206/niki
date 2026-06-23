@@ -8,3 +8,4 @@ export * from './calendar';
 export * from './finance';
 export * from './knowledge';
 export * from './memories';
+export * from './ai';

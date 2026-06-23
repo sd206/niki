@@ -3,14 +3,18 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/useAuth';
 import { api } from '@/lib/api';
-import type { Family, Event, EventType, Task } from '@niki/shared';
-import { EVENT_TEMPLATES } from '@niki/shared';
+import type { Family, Event, EventType, Task, EventPlanDraft, ExpenseCategory } from '@niki/shared';
+import { EVENT_TEMPLATES, EXPENSE_CATEGORIES } from '@niki/shared';
 
 /**
  * Single static route, same reason as /family and /tasks (apps/web uses
  * `output: 'export'`). Event "detail" is an inline expand within this list
  * rather than a separate /events/[id] route, since a dynamic segment isn't
  * feasible for arbitrary Firestore doc IDs under static export.
+ *
+ * Phase 4.B adds an "AI plan assist" action to the expanded view: calls
+ * POST .../plan-assist (Gemini) and shows a draft checklist + budget the
+ * user reviews and explicitly accepts — nothing is auto-created.
  */
 export default function EventsPage() {
   const { user, loading } = useAuth();
@@ -29,6 +33,11 @@ export default function EventsPage() {
   const [endDate, setEndDate] = useState('');
   const [description, setDescription] = useState('');
   const [busy, setBusy] = useState(false);
+
+  const [planDraft, setPlanDraft] = useState<EventPlanDraft | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [addedChecklistTitles, setAddedChecklistTitles] = useState<Set<string>>(new Set());
+  const [budgetAccepted, setBudgetAccepted] = useState(false);
 
   async function loadEvents(familyId: string) {
     const result = await api.events.list(familyId);
@@ -86,6 +95,9 @@ export default function EventsPage() {
     if (expandedId === event.id) {
       setExpandedId(null);
       setExpandedTasks([]);
+      setPlanDraft(null);
+      setAddedChecklistTitles(new Set());
+      setBudgetAccepted(false);
       return;
     }
     setError(null);
@@ -93,6 +105,9 @@ export default function EventsPage() {
       const result = await api.events.get(family.id, event.id);
       setExpandedId(event.id);
       setExpandedTasks(result.tasks);
+      setPlanDraft(null);
+      setAddedChecklistTitles(new Set());
+      setBudgetAccepted(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load event details');
     }
@@ -120,6 +135,68 @@ export default function EventsPage() {
       await loadEvents(family.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to delete event');
+    }
+  }
+
+  async function handlePlanAssist(event: Event) {
+    if (!family) return;
+    setPlanLoading(true);
+    setError(null);
+    try {
+      const draft = await api.events.planAssist(family.id, event.id);
+      setPlanDraft(draft);
+      setAddedChecklistTitles(new Set());
+      setBudgetAccepted(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'AI plan assist failed — is Vertex AI configured?');
+    } finally {
+      setPlanLoading(false);
+    }
+  }
+
+  async function handleAcceptChecklistItem(event: Event, item: { title: string; description?: string }) {
+    if (!family) return;
+    setError(null);
+    try {
+      await api.tasks.create(family.id, {
+        title: item.title,
+        description: item.description,
+        eventId: event.id,
+        priority: 'medium',
+      });
+      setAddedChecklistTitles((prev) => new Set(prev).add(item.title));
+      const result = await api.events.get(family.id, event.id);
+      setExpandedTasks(result.tasks);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to add suggested task');
+    }
+  }
+
+  /** Best-effort match of Gemini's free-text category onto our fixed ExpenseCategory enum. */
+  function matchExpenseCategory(category: string): ExpenseCategory {
+    const needle = category.toLowerCase();
+    const match = EXPENSE_CATEGORIES.find((c) => needle.includes(c) || c.includes(needle));
+    return match ?? 'other';
+  }
+
+  async function handleAcceptBudget(event: Event, items: EventPlanDraft['budget']) {
+    if (!family || items.length === 0) return;
+    setError(null);
+    try {
+      const categoryAllocations: Partial<Record<ExpenseCategory, number>> = {};
+      for (const item of items) {
+        const category = matchExpenseCategory(item.category);
+        categoryAllocations[category] = (categoryAllocations[category] ?? 0) + item.estimatedAmount;
+      }
+      await api.budgets.create(family.id, {
+        name: `${event.title} (AI suggested)`,
+        period: 'event',
+        eventId: event.id,
+        categoryAllocations,
+      });
+      setBudgetAccepted(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to create budget from suggestions');
     }
   }
 
@@ -169,6 +246,58 @@ export default function EventsPage() {
                 <button onClick={() => handleAddTaskToEvent(ev)} disabled={!newTaskTitle} style={{ marginLeft: 8 }}>
                   Add task
                 </button>
+
+                <div style={{ marginTop: 16, borderTop: '1px solid #eee', paddingTop: 12 }}>
+                  <h4>AI plan assist</h4>
+                  <button onClick={() => handlePlanAssist(ev)} disabled={planLoading}>
+                    {planLoading ? 'Thinking…' : 'Get checklist + budget suggestions'}
+                  </button>
+
+                  {planDraft && (
+                    <div style={{ marginTop: 12 }}>
+                      <strong>Suggested checklist</strong>
+                      <ul>
+                        {planDraft.checklist.map((item) => (
+                          <li key={item.title} style={{ marginBottom: 4 }}>
+                            {item.title}
+                            {item.description && (
+                              <span style={{ color: '#888' }}> — {item.description}</span>
+                            )}{' '}
+                            {addedChecklistTitles.has(item.title) ? (
+                              <span style={{ color: 'green', fontSize: '0.85em' }}>Added</span>
+                            ) : (
+                              <button onClick={() => handleAcceptChecklistItem(ev, item)} style={{ fontSize: '0.85em' }}>
+                                Add as task
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                        {planDraft.checklist.length === 0 && <li>No checklist suggestions.</li>}
+                      </ul>
+
+                      <strong>Suggested budget</strong>
+                      <ul>
+                        {planDraft.budget.map((item) => (
+                          <li key={item.category}>
+                            {item.category}: {item.estimatedAmount}
+                            {item.notes && <span style={{ color: '#888' }}> — {item.notes}</span>}
+                          </li>
+                        ))}
+                        {planDraft.budget.length === 0 && <li>No budget suggestions.</li>}
+                      </ul>
+                      {planDraft.budget.length > 0 && (
+                        budgetAccepted ? (
+                          <span style={{ color: 'green', fontSize: '0.85em' }}>Budget created</span>
+                        ) : (
+                          <button onClick={() => handleAcceptBudget(ev, planDraft.budget)} style={{ fontSize: '0.85em' }}>
+                            Create event budget from these suggestions
+                          </button>
+                        )
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <br />
                 <button onClick={() => handleDelete(ev)} style={{ marginTop: 8, color: 'crimson' }}>
                   Delete event

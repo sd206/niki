@@ -45,6 +45,8 @@ import type {
   Memory,
   CreateMemoryInput,
   UpdateMemoryInput,
+  SearchResponse,
+  EventPlanDraft,
 } from '@niki/shared';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? '/v1';
@@ -123,6 +125,8 @@ export const api = {
       request<Event>('PATCH', `/families/${familyId}/events/${eventId}`, input),
     remove: (familyId: string, eventId: string) =>
       request<void>('DELETE', `/families/${familyId}/events/${eventId}`),
+    planAssist: (familyId: string, eventId: string) =>
+      request<EventPlanDraft>('POST', `/families/${familyId}/events/${eventId}/plan-assist`),
   },
   vault: {
     list: (familyId: string, category?: VaultCategory) =>
@@ -212,5 +216,9 @@ export const api = {
       request<Memory>('PATCH', `/families/${familyId}/memories/${memoryId}`, input),
     remove: (familyId: string, memoryId: string) =>
       request<void>('DELETE', `/families/${familyId}/memories/${memoryId}`),
+  },
+  search: {
+    query: (familyId: string, q: string) =>
+      request<SearchResponse>('GET', `/families/${familyId}/search?q=${encodeURIComponent(q)}`),
   },
 };

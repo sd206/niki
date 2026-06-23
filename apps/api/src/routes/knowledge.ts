@@ -10,13 +10,16 @@ import { db } from '../lib/firebaseAdmin';
 import { authenticate, type AuthedRequest } from '../middleware/auth';
 import { requireFamilyRole } from '../middleware/requireFamilyRole';
 import { ApiError } from '../middleware/errorHandler';
+import { indexForSearch, removeFromSearchIndex } from '../lib/searchIndexing';
 
 /**
  * Mounted at /v1/families/:familyId/knowledge (see index.ts) with
  * `{ mergeParams: true }` — same pattern as budgets/expenses/vault. Part of
- * Phase 3.A. Search here is basic tag/title substring matching done
- * in-memory after fetch (Firestore has no native text search); AI-powered
- * semantic search is deferred to Phase 4.D per PHASES.md.
+ * Phase 3.A. The substring `q`/`tag` filtering below is the basic in-memory
+ * search from that phase (Firestore has no native text search). Phase 4.A
+ * adds real semantic search on top: every create/update/delete also
+ * fire-and-forget indexes (or removes) this entry's embedding via
+ * indexForSearch/removeFromSearchIndex, queried from routes/search.ts.
  */
 export const knowledgeRouter = Router({ mergeParams: true });
 knowledgeRouter.use(authenticate);
@@ -96,6 +99,7 @@ knowledgeRouter.post('/', async (req: KnowledgeRequest, res, next) => {
       updatedAt: now,
     };
     await entryRef.set(entry);
+    indexForSearch({ type: 'knowledge', id: entry.id, familyId }, `${entry.title}\n${entry.body}`);
 
     return res.status(201).json(entry);
   } catch (err) {
@@ -125,7 +129,10 @@ knowledgeRouter.patch('/:entryId', async (req: KnowledgeRequest, res, next) => {
     const updates = { ...input, updatedAt: new Date().toISOString() };
     await entryRef.update(updates);
 
-    return res.json({ ...entry, ...updates });
+    const merged = { ...entry, ...updates };
+    indexForSearch({ type: 'knowledge', id: merged.id, familyId }, `${merged.title}\n${merged.body}`);
+
+    return res.json(merged);
   } catch (err) {
     next(err instanceof Error ? err : new ApiError(400, 'Invalid input'));
   }
@@ -150,6 +157,7 @@ knowledgeRouter.delete('/:entryId', async (req: KnowledgeRequest, res, next) => 
     }
 
     await entryRef.delete();
+    removeFromSearchIndex({ type: 'knowledge', id: entry.id });
     return res.status(204).send();
   } catch (err) {
     next(err);

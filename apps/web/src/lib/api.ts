@@ -48,6 +48,8 @@ import type {
   SearchResponse,
   EventPlanDraft,
   FinancialCoachingResponse,
+  KnowledgeSummaryResponse,
+  KnowledgeDigestResponse,
 } from '@niki/shared';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? '/v1';
@@ -205,6 +207,15 @@ export const api = {
       request<KnowledgeEntry>('PATCH', `/families/${familyId}/knowledge/${entryId}`, input),
     remove: (familyId: string, entryId: string) =>
       request<void>('DELETE', `/families/${familyId}/knowledge/${entryId}`),
+    summarize: (familyId: string, entryId: string) =>
+      request<KnowledgeSummaryResponse>('POST', `/families/${familyId}/knowledge/${entryId}/summarize`),
+    digest: (familyId: string, filter?: { tag?: string; contentType?: KnowledgeContentType }) => {
+      const params = new URLSearchParams();
+      if (filter?.tag) params.set('tag', filter.tag);
+      if (filter?.contentType) params.set('contentType', filter.contentType);
+      const qs = params.toString();
+      return request<KnowledgeDigestResponse>('GET', `/families/${familyId}/knowledge/digest${qs ? `?${qs}` : ''}`);
+    },
   },
   memories: {
     list: (familyId: string, filter?: { eventId?: string; from?: string; to?: string }) => {

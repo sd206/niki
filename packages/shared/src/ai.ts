@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ExpenseCategorySchema } from './finance';
+import { KnowledgeContentTypeSchema } from './knowledge';
 
 /**
  * Phase 4.A — Search. Content types currently indexed into Vertex AI Vector
@@ -88,3 +89,32 @@ export const FinancialCoachingResponseSchema = z.object({
   summary: z.string(),
 });
 export type FinancialCoachingResponse = z.infer<typeof FinancialCoachingResponseSchema>;
+
+/**
+ * Phase 4.D — Knowledge summarization. Unlike 4.C, there's no deterministic
+ * "true number" to protect — summarizing free-text body content genuinely
+ * requires an LLM, so both endpoints (apps/api/src/routes/knowledge.ts:
+ * POST /:entryId/summarize, GET /digest) return 503 if Vertex AI isn't
+ * configured, same fail-soft pattern as 4.B's plan-assist. `entryCount` on
+ * the digest is the one fact computed in code (real Firestore count), not
+ * asked of the model. Both are stateless — generated on demand, never
+ * persisted onto the KnowledgeEntry itself (explicit decision, so summaries
+ * always reflect the entry's current body with no staleness/migration
+ * concerns).
+ */
+export const KnowledgeSummaryResponseSchema = z.object({
+  entryId: z.string(),
+  title: z.string(),
+  summary: z.string(),
+});
+export type KnowledgeSummaryResponse = z.infer<typeof KnowledgeSummaryResponseSchema>;
+
+export const KnowledgeDigestResponseSchema = z.object({
+  /** Real Firestore count of entries matching the scope — not LLM-reported. */
+  entryCount: z.number(),
+  tag: z.string().optional(),
+  contentType: KnowledgeContentTypeSchema.optional(),
+  summary: z.string(),
+  highlights: z.array(z.string()),
+});
+export type KnowledgeDigestResponse = z.infer<typeof KnowledgeDigestResponseSchema>;

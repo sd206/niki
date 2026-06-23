@@ -3,14 +3,16 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/useAuth';
 import { api } from '@/lib/api';
-import type { Family, KnowledgeEntry, KnowledgeContentType } from '@niki/shared';
+import type { Family, KnowledgeEntry, KnowledgeContentType, KnowledgeDigestResponse } from '@niki/shared';
 import { KNOWLEDGE_CONTENT_TYPES } from '@niki/shared';
 
 /**
  * Single static route (apps/web uses `output: 'export'`), same reason as
  * /calendar, /finance, /vault — no dynamic [id] route, expand-in-place
  * instead. Phase 3.A. Search is the basic tag/title match the API does
- * in-memory; AI-powered semantic search is deferred to Phase 4.D.
+ * in-memory; semantic search is Phase 4.A (/search). Phase 4.D adds
+ * AI summarization here: a per-entry "Summarize" button and a digest panel
+ * below — both stateless, generated on demand, never persisted.
  */
 export default function KnowledgePage() {
   const { user, loading } = useAuth();
@@ -23,6 +25,14 @@ export default function KnowledgePage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+
+  const [summaries, setSummaries] = useState<Record<string, string>>({});
+  const [summarizingId, setSummarizingId] = useState<string | null>(null);
+
+  const [digest, setDigest] = useState<KnowledgeDigestResponse | null>(null);
+  const [digestLoading, setDigestLoading] = useState(false);
+  const [digestTag, setDigestTag] = useState('');
+  const [digestContentType, setDigestContentType] = useState<KnowledgeContentType | ''>('');
 
   async function loadEntries(familyId: string, query?: string) {
     const result = await api.knowledge.list(familyId, query ? { q: query } : undefined);
@@ -67,6 +77,37 @@ export default function KnowledgePage() {
     }
   }
 
+  async function handleSummarize(entry: KnowledgeEntry) {
+    if (!family) return;
+    setSummarizingId(entry.id);
+    setError(null);
+    try {
+      const result = await api.knowledge.summarize(family.id, entry.id);
+      setSummaries((s) => ({ ...s, [entry.id]: result.summary }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to summarize entry');
+    } finally {
+      setSummarizingId(null);
+    }
+  }
+
+  async function handleDigest() {
+    if (!family) return;
+    setDigestLoading(true);
+    setError(null);
+    try {
+      const result = await api.knowledge.digest(family.id, {
+        tag: digestTag || undefined,
+        contentType: digestContentType || undefined,
+      });
+      setDigest(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate digest');
+    } finally {
+      setDigestLoading(false);
+    }
+  }
+
   if (loading || loadingData) {
     return <div className="container">Loading…</div>;
   }
@@ -102,6 +143,46 @@ export default function KnowledgePage() {
           </button>
         )}
       </form>
+
+      <div style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginTop: 16, maxWidth: 560 }}>
+        <h3 style={{ marginTop: 0 }}>Knowledge digest</h3>
+        <p style={{ color: '#666', fontSize: '0.9em', margin: '4px 0 8px' }}>
+          AI-generated overview of your knowledge base — leave both filters blank for the whole hub.
+        </p>
+        <select value={digestContentType} onChange={(e) => setDigestContentType(e.target.value as KnowledgeContentType | '')}>
+          <option value="">All types</option>
+          {KNOWLEDGE_CONTENT_TYPES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+        <input
+          placeholder="Tag (optional)"
+          value={digestTag}
+          onChange={(e) => setDigestTag(e.target.value)}
+          style={{ marginLeft: 8 }}
+        />
+        <button onClick={handleDigest} disabled={digestLoading} style={{ marginLeft: 8 }}>
+          {digestLoading ? 'Generating…' : 'Generate digest'}
+        </button>
+
+        {digest && (
+          <div style={{ marginTop: 12 }}>
+            <p style={{ fontStyle: 'italic' }}>{digest.summary}</p>
+            <p style={{ fontSize: '0.85em', color: '#888' }}>Based on {digest.entryCount} matching entr{digest.entryCount === 1 ? 'y' : 'ies'}.</p>
+            {digest.highlights.length > 0 && (
+              <ul style={{ paddingLeft: 16 }}>
+                {digest.highlights.map((h, i) => (
+                  <li key={i} style={{ fontSize: '0.9em' }}>
+                    {h}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
 
       <div style={{ marginTop: 16 }}>
         {entries.length === 0 && <p>No knowledge entries yet.</p>}
@@ -152,7 +233,15 @@ export default function KnowledgePage() {
               {expandedId === entry.id && (
                 <>
                   <p style={{ whiteSpace: 'pre-wrap', marginTop: 8 }}>{entry.body}</p>
+                  {summaries[entry.id] && (
+                    <p style={{ fontStyle: 'italic', color: '#555', background: '#f7f7f7', borderRadius: 6, padding: 8 }}>
+                      {summaries[entry.id]}
+                    </p>
+                  )}
                   <button onClick={() => setEditingId(entry.id)}>Edit</button>
+                  <button onClick={() => handleSummarize(entry)} disabled={summarizingId === entry.id} style={{ marginLeft: 8 }}>
+                    {summarizingId === entry.id ? 'Summarizing…' : 'Summarize'}
+                  </button>
                   <button
                     onClick={async () => {
                       setError(null);

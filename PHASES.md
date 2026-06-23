@@ -411,11 +411,42 @@ Phase 2.B Finance Hub data (`Budget`, `Expense`, `SavingsGoal`).
   `apps/web/src/app/finance/page.tsx`). Button-triggered fetch (not
   auto-loaded), shows the summary plus alert/recommendation cards.
 
-### 4.D — Knowledge search & summarization
+### 4.D — Knowledge summarization (SHIPPED)
 
 Superseded in part by 4.A (Knowledge entries are now semantically
-searchable); summarization specifically remains the next item to build,
-per the locked-in order 4.C → 4.D → 4.E.
+searchable) — this phase covers the summarization piece specifically.
+Scoped with the user via two explicit questions: build all three variants
+(single-entry summary, tag/category digest, family-wide digest), and keep
+generation stateless (never persisted on the entry) — the recommended
+option.
+
+- **Design decision (locked in): no deterministic fallback, unlike 4.C.**
+  Summarizing free-text body content genuinely requires an LLM — there's no
+  "true number" to protect the way 4.C protects dollar figures. Both
+  endpoints below return 503 if Vertex AI isn't configured, same fail-soft
+  pattern as 4.B's plan-assist.
+- **Data model**: `packages/shared/src/ai.ts` — `KnowledgeSummaryResponse`
+  (entryId, title, summary) and `KnowledgeDigestResponse` (entryCount, tag?,
+  contentType?, summary, highlights). `entryCount` is always the real
+  Firestore count of matching entries, computed in code — never asked of
+  the model, same "never let the LLM report a fact code can compute"
+  principle as 4.C. Both stateless — never persisted onto the
+  `KnowledgeEntry` itself.
+- **API** (`apps/api/src/routes/knowledge.ts`):
+  - `POST /:entryId/summarize` — summarizes a single entry's body in 2-4
+    sentences.
+  - `GET /digest?tag=&contentType=` — covers both the tag/category digest
+    and the whole-hub digest with one endpoint (no filters = whole-hub).
+    Registered before `GET /:entryId` in the router so the literal path
+    segment `digest` isn't swallowed as an `entryId` param (Express matches
+    routes in declaration order, not by specificity). Caps prompt context to
+    30 entries × 400 chars of body each to bound token usage regardless of
+    Knowledge Hub size; `entryCount` returned is always the real, uncapped
+    count.
+- **Web UI**: `/knowledge` — a "Summarize" button on each expanded entry
+  (inline summary display) and a "Knowledge digest" panel above the entry
+  list (content-type + tag filters, "Generate digest" button, shows
+  summary/entryCount/highlights). `apps/web/src/app/knowledge/page.tsx`.
 
 ### 4.E — Security monitoring
 

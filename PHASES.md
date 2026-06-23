@@ -116,10 +116,10 @@ premium-tier territory — proposing a deliberately small first cut.
 - **Data model**: `VaultItem` — id, familyId, name, driveFileId,
   driveFileUrl (webViewLink from Drive API), category (one of the PRD's
   categories: home/vehicles/travel/insurance/taxes/medical/school/legal/
-  financial/pets/custom), folderType (`standard` only for this slice —
-  `restricted`/`secure`/`vault` tiers deferred), eventId (optional, links to
-  Phase 1.C events), addedBy, createdAt. Stored at
-  `families/{familyId}/vaultItems/{id}`.
+  financial/pets/custom), folderType (`standard` for this slice —
+  `restricted`/`secure`/`vault` tiers landed in the Vault hardening pass
+  below), eventId (optional, links to Phase 1.C events), addedBy,
+  createdAt. Stored at `families/{familyId}/vaultItems/{id}`.
 - **API** (`apps/api/src/routes/vault.ts`): list/create/delete. "Create"
   here means: user picks a file via Google Drive Picker (client-side,
   using the existing Drive OAuth connection), API just stores the
@@ -127,11 +127,51 @@ premium-tier territory — proposing a deliberately small first cut.
   "families own their data" principle.
 - **Web UI**: vault list (filterable by category), "Add from Drive" button
   (Google Picker API), category assignment
-- **Deferred to later**: restricted/secure/vault folder tiers, password
-  protection, biometric auth, audit logs, emergency access, client-side
-  encryption, AI sensitive-document detection — all explicitly Premium/
-  Family Plus tier in the PRD's monetization section, reasonable to defer
-  past MVP
+- **Deferred to later**: password protection, biometric auth, emergency
+  access, client-side encryption, AI sensitive-document detection — all
+  explicitly Premium/Family Plus tier in the PRD's monetization section,
+  reasonable to defer past MVP. (Folder tiers + audit logs were promoted
+  out of this deferred list — see the Vault hardening pass below.)
+
+### Vault hardening pass (SHIPPED)
+
+Built immediately before Phase 4.E, per the locked-in Phase 4 build order
+(4.C → 4.D → hardening pass → 4.E) — 4.E's permission review/sensitive-doc
+detection needs real security tiers to monitor. Scoped with the user via
+two explicit questions: of the deferred 1.D items, build **only audit
+logs** alongside the three folder tiers (password protection/biometric
+step-up, emergency access, and client-side encryption remain explicitly
+deferred Family Plus work); gate hardened-tier access to **role >= parent**
+(not "any active member" or a per-tier minimum).
+
+- **Data model** (`packages/shared/src/vault.ts`): `VAULT_FOLDER_TYPES`
+  expanded to `standard`/`restricted`/`secure`/`vault`;
+  `HARDENED_VAULT_FOLDER_TYPES` groups the latter three. New
+  `VaultAuditLogEntry` (id, familyId, vaultItemId, vaultItemName,
+  folderType, action: `view`/`create`/`delete`, actorUid, timestamp), stored
+  at `families/{familyId}/vaultAuditLog/{id}` — append-only, no
+  update/delete endpoint, by design: an audit trail that could be edited or
+  erased isn't a trail.
+- **Role gating** (`apps/api/src/routes/vault.ts`): `standard` items are
+  fully unchanged (any active member create/view/delete-if-creator-or-
+  parent+). `restricted`/`secure`/`vault` items require role >= parent for
+  create, view, and delete — even the "whoever added it" delete exception
+  is suppressed for hardened items. `GET /` with no `folderType` filter
+  silently drops hardened items from the list for non-parent callers
+  (rather than 403ing the whole list); explicitly requesting a hardened
+  `folderType` as a non-parent still 403s.
+- **Audit logging**: every create/delete of a hardened item, and every
+  view of a hardened item by a parent+ caller, writes a
+  `VaultAuditLogEntry`. Logging is fire-and-forget and best-effort — wrapped
+  in try/catch that silently swallows failures, since a logging failure
+  must never surface as a user-facing error or block the underlying vault
+  operation. New `GET /audit-log` route (parent+ only, 200-entry limit,
+  newest first) — this is the data Phase 4.E reads.
+- **Web UI** (`apps/web/src/app/vault/page.tsx`): folder filter dropdown;
+  🔒 lock icon + folder label on hardened items; Folder select in "Add from
+  Drive" (hardened options hidden for non-parents, with an explanatory
+  message); parent-only "Audit log" panel with a When/Action/Item/Folder/By
+  table.
 
 ### Suggested Phase 1 order
 
@@ -451,9 +491,9 @@ option.
 ### 4.E — Security monitoring
 
 Permission review, sensitive-document detection — depends on Vault's
-deferred security tiers (1.D) actually being built first. Per the locked-in
-plan, a Vault hardening pass (building the `restricted`/`secure`/`vault`
-folder tiers deferred in 1.D) happens immediately before this.
+security tiers, which the Vault hardening pass (see Phase 1 section above)
+has now shipped: `restricted`/`secure`/`vault` folder tiers, role gating,
+and the `vaultAuditLog` this phase will read.
 
 ---
 

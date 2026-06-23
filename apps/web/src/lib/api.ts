@@ -25,6 +25,8 @@ import type {
   VaultItem,
   CreateVaultItemInput,
   VaultCategory,
+  VaultFolderType,
+  VaultAuditLogEntry,
   CalendarEntry,
   CreateCalendarEntryInput,
   UpdateCalendarEntryInput,
@@ -132,12 +134,19 @@ export const api = {
       request<EventPlanDraft>('POST', `/families/${familyId}/events/${eventId}/plan-assist`),
   },
   vault: {
-    list: (familyId: string, category?: VaultCategory) =>
-      request<VaultItem[]>('GET', `/families/${familyId}/vault${category ? `?category=${category}` : ''}`),
+    list: (familyId: string, filter?: { category?: VaultCategory; folderType?: VaultFolderType }) => {
+      const params = new URLSearchParams();
+      if (filter?.category) params.set('category', filter.category);
+      if (filter?.folderType) params.set('folderType', filter.folderType);
+      const qs = params.toString();
+      return request<VaultItem[]>('GET', `/families/${familyId}/vault${qs ? `?${qs}` : ''}`);
+    },
     create: (familyId: string, input: CreateVaultItemInput) =>
       request<VaultItem>('POST', `/families/${familyId}/vault`, input),
     remove: (familyId: string, itemId: string) =>
       request<void>('DELETE', `/families/${familyId}/vault/${itemId}`),
+    auditLog: (familyId: string) =>
+      request<VaultAuditLogEntry[]>('GET', `/families/${familyId}/vault/audit-log`),
   },
   calendar: {
     range: (familyId: string, from: string, to: string) =>

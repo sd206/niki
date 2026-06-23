@@ -18,12 +18,21 @@ export const VaultCategorySchema = z.enum(VAULT_CATEGORIES);
 export type VaultCategory = z.infer<typeof VaultCategorySchema>;
 
 /**
- * Only 'standard' exists in this MVP slice. restricted/secure/vault tiers
- * (password protection, biometric auth, audit logs) are explicitly deferred
- * Family Plus premium-tier work per PHASES.md 1.D.
+ * Vault hardening pass (PHASES.md 1.D follow-up, precedes Phase 4.E).
+ * `standard` is unchanged from the original MVP slice — any active member
+ * can create/view. `restricted`/`secure`/`vault` are gated to role >= parent
+ * (apps/api/src/routes/vault.ts) and every create/view/delete against them
+ * writes a VaultAuditLogEntry below. Password protection, biometric step-up,
+ * emergency access, and client-side encryption remain explicitly deferred
+ * Family Plus premium-tier work — this pass only covers folder tiers + role
+ * gating + audit logging, per the user's explicit scoping decision.
  */
-export const VaultFolderTypeSchema = z.literal('standard');
+export const VAULT_FOLDER_TYPES = ['standard', 'restricted', 'secure', 'vault'] as const;
+export const VaultFolderTypeSchema = z.enum(VAULT_FOLDER_TYPES);
 export type VaultFolderType = z.infer<typeof VaultFolderTypeSchema>;
+
+/** Folder types where access is gated to role >= parent and audit-logged. */
+export const HARDENED_VAULT_FOLDER_TYPES: readonly VaultFolderType[] = ['restricted', 'secure', 'vault'];
 
 /**
  * A vault item document, stored at families/{familyId}/vaultItems/{id}.
@@ -51,6 +60,31 @@ export const CreateVaultItemInputSchema = z.object({
   driveFileId: z.string(),
   driveFileUrl: z.string(),
   category: VaultCategorySchema.default('custom'),
+  folderType: VaultFolderTypeSchema.default('standard'),
   eventId: z.string().optional(),
 });
 export type CreateVaultItemInput = z.infer<typeof CreateVaultItemInputSchema>;
+
+/**
+ * One entry per access (view list / create / delete) against a
+ * restricted/secure/vault item — never written for 'standard' items, to
+ * keep this collection from growing unboundedly for everyday use. Stored at
+ * families/{familyId}/vaultAuditLog/{id}. Read-only from the API's
+ * perspective (no update/delete endpoint) — an audit trail that could be
+ * edited or erased isn't a trail.
+ */
+export const VAULT_AUDIT_ACTIONS = ['view', 'create', 'delete'] as const;
+export const VaultAuditActionSchema = z.enum(VAULT_AUDIT_ACTIONS);
+export type VaultAuditAction = z.infer<typeof VaultAuditActionSchema>;
+
+export const VaultAuditLogEntrySchema = z.object({
+  id: z.string(),
+  familyId: z.string(),
+  vaultItemId: z.string(),
+  vaultItemName: z.string(),
+  folderType: VaultFolderTypeSchema,
+  action: VaultAuditActionSchema,
+  actorUid: z.string(),
+  timestamp: z.string(),
+});
+export type VaultAuditLogEntry = z.infer<typeof VaultAuditLogEntrySchema>;

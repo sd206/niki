@@ -62,7 +62,7 @@ per module. Proposed granular breakdown below — each milestone is sized to
 be built, deployed, and manually verified independently, the same way
 Phase 0 went.
 
-### 1.A — Family Invites UI (carry-over from Phase 0)
+### 1.A — Family Invites UI (carry-over from Phase 0) (SHIPPED)
 
 The API (`POST /v1/families/:id/invites`, `POST /v1/invites/:code/accept`)
 already exists with no UI. Small, fast, unblocks "Invite Members" being a
@@ -72,7 +72,7 @@ real flow before Vault/Events/Tasks need to reference other members.
 - Web: accept-invite page/flow for the invitee
 - No new data model — wires up what's already there
 
-### 1.B — Tasks (MVP)
+### 1.B — Tasks (MVP) (SHIPPED)
 
 Simplest of the three: no file storage, no folder permission tiers.
 
@@ -88,7 +88,7 @@ Simplest of the three: no file storage, no folder permission tiers.
   attachments, dependencies, push notifications — all explicitly called out
   as MVP-excluded depth in the PRD's "Future" framing for this module
 
-### 1.C — Events (MVP)
+### 1.C — Events (MVP) (SHIPPED)
 
 Builds on Tasks (an Event has a task list) — sequencing after 1.B so there's
 something real to attach.
@@ -107,7 +107,7 @@ something real to attach.
   linkage on an event — those land once Vault (1.D) and Finance (Phase 2)
   exist to link to
 
-### 1.D — Vault (MVP slice)
+### 1.D — Vault (MVP slice) (SHIPPED)
 
 Most complex first slice. The PRD's full vault (4 folder tiers, biometric +
 MFA, audit logs, AI categorization, client-side encryption) is Family Plus

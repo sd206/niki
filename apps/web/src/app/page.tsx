@@ -46,7 +46,7 @@ export default function HomePage() {
           </a>
         </>
       ) : (
-        <p>{profile?.familyIds.length} family(ies). Vault lands in a later phase.</p>
+        <p>{profile?.familyIds.length} family(ies).</p>
       )}
       <p style={{ marginTop: 32 }}>
         <a href="/family">Family</a>
@@ -54,6 +54,8 @@ export default function HomePage() {
         <a href="/tasks">Tasks</a>
         {' · '}
         <a href="/events">Events</a>
+        {' · '}
+        <a href="/vault">Vault</a>
         {' · '}
         <a href="/settings">Settings</a>
       </p>

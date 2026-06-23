@@ -3,8 +3,9 @@ import { Router } from 'express';
 import type { DriveConnection } from '@niki/shared';
 import { db } from '../lib/firebaseAdmin';
 import { getDriveOAuthClient, DRIVE_SCOPES } from '../lib/driveOAuth';
-import { storeDriveRefreshToken } from '../lib/secretManager';
+import { storeDriveRefreshToken, getDriveRefreshToken } from '../lib/secretManager';
 import { authenticate, type AuthedRequest } from '../middleware/auth';
+import { ApiError } from '../middleware/errorHandler';
 
 export const driveRouter = Router();
 
@@ -118,6 +119,34 @@ driveRouter.get('/status', authenticate, async (req: AuthedRequest, res, next) =
       return res.json({ uid: req.uid, status: 'disconnected', scopes: [] } satisfies DriveConnection);
     }
     return res.json(snap.data() as DriveConnection);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /v1/drive/picker-token — authenticated. Mints a short-lived Drive
+ * access token from the caller's stored refresh token, for client-side use
+ * with the Google Picker API (Phase 1.D Vault "Add from Drive"). The access
+ * token never touches Firestore — it's returned once, directly to the
+ * caller, and expires on Google's normal ~1hr access-token lifetime.
+ */
+driveRouter.post('/picker-token', authenticate, async (req: AuthedRequest, res, next) => {
+  try {
+    const refreshToken = await getDriveRefreshToken(req.uid!);
+    if (!refreshToken) {
+      throw new ApiError(400, 'Drive is not connected for this user');
+    }
+
+    const client = getDriveOAuthClient();
+    client.setCredentials({ refresh_token: refreshToken });
+    const { token, res: tokenRes } = await client.getAccessToken();
+    if (!token) {
+      throw new ApiError(502, 'Failed to mint Drive access token');
+    }
+
+    const expiresAt = tokenRes?.data?.expiry_date ?? Date.now() + 55 * 60 * 1000;
+    return res.json({ accessToken: token, expiresAt });
   } catch (err) {
     next(err);
   }

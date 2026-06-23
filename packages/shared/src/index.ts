@@ -3,3 +3,4 @@ export * from './family';
 export * from './user';
 export * from './task';
 export * from './event';
+export * from './vault';

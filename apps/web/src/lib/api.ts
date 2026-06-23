@@ -22,6 +22,9 @@ import type {
   Event,
   CreateEventInput,
   UpdateEventInput,
+  VaultItem,
+  CreateVaultItemInput,
+  VaultCategory,
 } from '@niki/shared';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? '/v1';
@@ -72,6 +75,8 @@ export const api = {
     status: () => request<DriveConnection>('GET', '/drive/status'),
     connect: (redirectTo?: string) =>
       request<{ url: string }>('POST', '/drive/connect', redirectTo ? { redirectTo } : undefined),
+    pickerToken: () =>
+      request<{ accessToken: string; expiresAt: number }>('POST', '/drive/picker-token'),
   },
   tasks: {
     list: (familyId: string, filter?: { status?: TaskStatus; assignedTo?: string }) => {
@@ -98,5 +103,13 @@ export const api = {
       request<Event>('PATCH', `/families/${familyId}/events/${eventId}`, input),
     remove: (familyId: string, eventId: string) =>
       request<void>('DELETE', `/families/${familyId}/events/${eventId}`),
+  },
+  vault: {
+    list: (familyId: string, category?: VaultCategory) =>
+      request<VaultItem[]>('GET', `/families/${familyId}/vault${category ? `?category=${category}` : ''}`),
+    create: (familyId: string, input: CreateVaultItemInput) =>
+      request<VaultItem>('POST', `/families/${familyId}/vault`, input),
+    remove: (familyId: string, itemId: string) =>
+      request<void>('DELETE', `/families/${familyId}/vault/${itemId}`),
   },
 };

@@ -49,6 +49,8 @@ export default function HomePage() {
         <p>{profile?.familyIds.length} family(ies). Modules (Vault, Events, Tasks…) land in later phases.</p>
       )}
       <p style={{ marginTop: 32 }}>
+        <a href="/family">Family</a>
+        {' · '}
         <a href="/settings">Settings</a>
       </p>
       <button onClick={() => signOutUser()} style={{ marginTop: 16 }}>

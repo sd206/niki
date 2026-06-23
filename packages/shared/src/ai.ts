@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ExpenseCategorySchema } from './finance';
 
 /**
  * Phase 4.A — Search. Content types currently indexed into Vertex AI Vector
@@ -51,3 +52,39 @@ export const EventPlanDraftSchema = z.object({
   budget: z.array(EventPlanBudgetItemSchema),
 });
 export type EventPlanDraft = z.infer<typeof EventPlanDraftSchema>;
+
+/**
+ * Phase 4.C — Financial coaching. All NUMBERS here (allocated/spent/overBy,
+ * goal progress, suggestedMonthlyContribution) are computed deterministically
+ * in apps/api/src/routes/financialCoaching.ts from real Budget/Expense/
+ * SavingsGoal data — never invented by an LLM. Gemini (when configured) only
+ * supplies the friendlier `message`/`summary` phrasing on top of those
+ * already-computed facts; if Vertex AI isn't configured, default template
+ * messages are used instead. Purely a read-only report — no Tasks/Budgets are
+ * created or modified by this endpoint.
+ */
+export const OverspendingAlertSchema = z.object({
+  budgetId: z.string(),
+  budgetName: z.string(),
+  category: ExpenseCategorySchema,
+  allocated: z.number(),
+  spent: z.number(),
+  overBy: z.number(),
+  message: z.string(),
+});
+export type OverspendingAlert = z.infer<typeof OverspendingAlertSchema>;
+
+export const SavingsRecommendationSchema = z.object({
+  goalId: z.string(),
+  goalName: z.string(),
+  message: z.string(),
+  suggestedMonthlyContribution: z.number().optional(),
+});
+export type SavingsRecommendation = z.infer<typeof SavingsRecommendationSchema>;
+
+export const FinancialCoachingResponseSchema = z.object({
+  alerts: z.array(OverspendingAlertSchema),
+  recommendations: z.array(SavingsRecommendationSchema),
+  summary: z.string(),
+});
+export type FinancialCoachingResponse = z.infer<typeof FinancialCoachingResponseSchema>;

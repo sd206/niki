@@ -237,8 +237,11 @@ Comes last because every prior phase's data (Vault metadata, Events, Tasks,
 Finance, Knowledge, Memories) is what the assistant searches/reasons over —
 building this earlier would mean indexing against a schema still in flux.
 
-Scoped with the user to **4.A + 4.B only** for this pass — 4.C/4.D/4.E remain
-deferred (see below).
+Scoped with the user to **4.A + 4.B** for the first pass (shipped). The user
+then chose to build out the remaining deferred items too, in order
+**4.C → 4.D → 4.E**, with a Vault hardening pass before 4.E specifically
+(to build the `restricted`/`secure`/`vault` folder tiers 4.E depends on,
+deferred back in 1.D).
 
 ### 4.A — Search (SHIPPED)
 
@@ -376,15 +379,50 @@ Until steps 1-5 are done, `/search` returns empty results (not an error)
 and the events page's "Get suggestions" button surfaces a clear 503 error
 message — both fail soft by design.
 
-- **4.C — Financial coaching**: overspending alerts, savings recommendations
-  — depends on Phase 2.B Finance data existing first. Deferred.
-- **4.D — Knowledge search & summarization**: superseded in part by 4.A
-  (Knowledge entries are now semantically searchable); summarization
-  specifically remains deferred.
-- **4.E — Security monitoring**: permission review, sensitive-document
-  detection — depends on Vault's deferred security tiers (1.D) actually
-  being built first, so likely re-sequences after a Vault hardening pass.
-  Deferred.
+### 4.C — Financial coaching (SHIPPED)
+
+Overspending alerts and savings pacing recommendations, computed from real
+Phase 2.B Finance Hub data (`Budget`, `Expense`, `SavingsGoal`).
+
+- **Design decision (locked in): deterministic numbers, AI phrasing only.**
+  Unlike 4.B's full Gemini-drafted plan, every dollar figure here (allocated,
+  spent, overBy, suggestedMonthlyContribution) is computed in plain
+  TypeScript from real Firestore data — never handed to an LLM to calculate,
+  so there's no risk of a hallucinated number. Gemini (if configured) is
+  only asked to phrase a short natural-language `summary` on top of those
+  already-computed facts, with an explicit prompt instruction not to alter
+  any numbers. If Gemini fails or Vertex AI isn't configured, a
+  template-generated `defaultSummary()` is used instead — so this feature is
+  fully functional even with zero AI infra provisioned (unlike 4.A/4.B,
+  which degrade to empty results/503).
+- **Data model**: `packages/shared/src/ai.ts` — `OverspendingAlert`
+  (budgetId, budgetName, category, allocated, spent, overBy, message),
+  `SavingsRecommendation` (goalId, goalName, message,
+  suggestedMonthlyContribution?), `FinancialCoachingResponse` (alerts,
+  recommendations, summary). Stateless — never persisted.
+- **API**: `GET /v1/families/:familyId/finance/coaching` —
+  `apps/api/src/routes/financialCoaching.ts`. Read-only; fetches
+  budgets/expenses/savingsGoals in parallel, computes alerts (spend per
+  category vs. allocation, scoped via `Expense.budgetId`) and
+  recommendations (monthly pacing against `targetDate` where set)
+  deterministically, then layers an optional Gemini summary on top. Never
+  writes to Firestore.
+- **Web UI**: `/finance` — new "Coaching" tab (`CoachingTab` in
+  `apps/web/src/app/finance/page.tsx`). Button-triggered fetch (not
+  auto-loaded), shows the summary plus alert/recommendation cards.
+
+### 4.D — Knowledge search & summarization
+
+Superseded in part by 4.A (Knowledge entries are now semantically
+searchable); summarization specifically remains the next item to build,
+per the locked-in order 4.C → 4.D → 4.E.
+
+### 4.E — Security monitoring
+
+Permission review, sensitive-document detection — depends on Vault's
+deferred security tiers (1.D) actually being built first. Per the locked-in
+plan, a Vault hardening pass (building the `restricted`/`secure`/`vault`
+folder tiers deferred in 1.D) happens immediately before this.
 
 ---
 

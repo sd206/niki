@@ -10,10 +10,11 @@ import type {
   Expense,
   ExpenseCategory,
   SavingsGoal,
+  FinancialCoachingResponse,
 } from '@niki/shared';
 import { BUDGET_PERIODS, EXPENSE_CATEGORIES } from '@niki/shared';
 
-type Tab = 'budgets' | 'expenses' | 'goals';
+type Tab = 'budgets' | 'expenses' | 'goals' | 'coaching';
 
 /**
  * Single static route (apps/web uses `output: 'export'`), same reason as
@@ -86,9 +87,15 @@ export default function FinancePage() {
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
       <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-        {(['budgets', 'expenses', 'goals'] as Tab[]).map((t) => (
+        {(['budgets', 'expenses', 'goals', 'coaching'] as Tab[]).map((t) => (
           <button key={t} onClick={() => setTab(t)} style={{ fontWeight: tab === t ? 'bold' : 'normal' }}>
-            {t === 'budgets' ? 'Budgets' : t === 'expenses' ? 'Expenses' : 'Savings Goals'}
+            {t === 'budgets'
+              ? 'Budgets'
+              : t === 'expenses'
+                ? 'Expenses'
+                : t === 'goals'
+                  ? 'Savings Goals'
+                  : 'Coaching'}
           </button>
         ))}
       </div>
@@ -103,6 +110,7 @@ export default function FinancePage() {
         {tab === 'goals' && (
           <SavingsGoalsTab familyId={family.id} goals={goals} onChange={refresh} setError={setError} />
         )}
+        {tab === 'coaching' && <CoachingTab familyId={family.id} />}
       </div>
 
       <p style={{ marginTop: 32 }}>
@@ -562,6 +570,86 @@ function SavingsGoalsTab({
           Save
         </button>
       </div>
+    </div>
+  );
+}
+
+// ---------- Coaching (Phase 4.C) ----------
+
+/**
+ * Read-only report: overspending alerts + savings recommendations computed
+ * deterministically by the API from real Budget/Expense/SavingsGoal data
+ * (apps/api/src/routes/financialCoaching.ts). Gemini (if configured) only
+ * supplies the `summary` phrasing — no numbers here come from an LLM, and
+ * nothing on this tab creates or modifies any Task/Budget/Expense.
+ */
+function CoachingTab({ familyId }: { familyId: string }) {
+  const [report, setReport] = useState<FinancialCoachingResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleLoad() {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await api.finance.coaching(familyId);
+      setReport(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load coaching insights');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div>
+      <p style={{ color: '#666', fontSize: '0.9em', maxWidth: 480 }}>
+        Overspending alerts and savings pacing, computed from your actual budgets and goals. Numbers are calculated
+        directly — AI is only used to phrase the summary below.
+      </p>
+      <button onClick={handleLoad} disabled={loading}>
+        {loading ? 'Checking…' : report ? 'Refresh insights' : 'Get coaching insights'}
+      </button>
+      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+
+      {report && (
+        <div style={{ marginTop: 16, maxWidth: 560 }}>
+          <p style={{ fontStyle: 'italic' }}>{report.summary}</p>
+
+          <h4>Overspending alerts</h4>
+          {report.alerts.length === 0 && <p style={{ color: '#888' }}>No budgets are currently over allocation.</p>}
+          {report.alerts.map((a, i) => (
+            <div
+              key={`${a.budgetId}-${a.category}-${i}`}
+              style={{ border: '1px solid #f3c4c4', background: '#fff5f5', borderRadius: 8, padding: 10, marginBottom: 6 }}
+            >
+              <strong style={{ color: 'crimson' }}>
+                {a.budgetName} — {a.category}
+              </strong>
+              <p style={{ margin: '4px 0', fontSize: '0.9em' }}>{a.message}</p>
+              <span style={{ fontSize: '0.85em', color: '#888' }}>
+                {money(a.spent)} spent / {money(a.allocated)} allocated
+              </span>
+            </div>
+          ))}
+
+          <h4 style={{ marginTop: 16 }}>Savings recommendations</h4>
+          {report.recommendations.length === 0 && (
+            <p style={{ color: '#888' }}>No savings goals need a contribution plan right now.</p>
+          )}
+          {report.recommendations.map((r) => (
+            <div key={r.goalId} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 10, marginBottom: 6 }}>
+              <strong>{r.goalName}</strong>
+              <p style={{ margin: '4px 0', fontSize: '0.9em' }}>{r.message}</p>
+              {r.suggestedMonthlyContribution !== undefined && (
+                <span style={{ fontSize: '0.85em', color: '#888' }}>
+                  Suggested: {money(r.suggestedMonthlyContribution)}/month
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

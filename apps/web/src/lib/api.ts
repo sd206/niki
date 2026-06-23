@@ -47,6 +47,7 @@ import type {
   UpdateMemoryInput,
   SearchResponse,
   EventPlanDraft,
+  FinancialCoachingResponse,
 } from '@niki/shared';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? '/v1';
@@ -182,6 +183,10 @@ export const api = {
       request<SavingsGoal>('PATCH', `/families/${familyId}/savings-goals/${goalId}`, input),
     remove: (familyId: string, goalId: string) =>
       request<void>('DELETE', `/families/${familyId}/savings-goals/${goalId}`),
+  },
+  finance: {
+    coaching: (familyId: string) =>
+      request<FinancialCoachingResponse>('GET', `/families/${familyId}/finance/coaching`),
   },
   knowledge: {
     list: (familyId: string, filter?: { q?: string; tag?: string; contentType?: KnowledgeContentType }) => {

@@ -25,6 +25,9 @@ import type {
   VaultItem,
   CreateVaultItemInput,
   VaultCategory,
+  CalendarEntry,
+  CreateCalendarEntryInput,
+  UpdateCalendarEntryInput,
 } from '@niki/shared';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? '/v1';
@@ -111,5 +114,15 @@ export const api = {
       request<VaultItem>('POST', `/families/${familyId}/vault`, input),
     remove: (familyId: string, itemId: string) =>
       request<void>('DELETE', `/families/${familyId}/vault/${itemId}`),
+  },
+  calendar: {
+    range: (familyId: string, from: string, to: string) =>
+      request<CalendarEntry[]>('GET', `/families/${familyId}/calendar?from=${from}&to=${to}`),
+    create: (familyId: string, input: CreateCalendarEntryInput) =>
+      request<CalendarEntry>('POST', `/families/${familyId}/calendar`, input),
+    update: (familyId: string, entryId: string, input: UpdateCalendarEntryInput) =>
+      request<CalendarEntry>('PATCH', `/families/${familyId}/calendar/${entryId}`, input),
+    remove: (familyId: string, entryId: string) =>
+      request<void>('DELETE', `/families/${familyId}/calendar/${entryId}`),
   },
 };

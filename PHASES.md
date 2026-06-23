@@ -142,7 +142,7 @@ manually verified before starting the next — mirrors how Phase 0 was run.
 
 ## Phase 2 — Calendar, Finance Hub
 
-### 2.A — Calendar
+### 2.A — Calendar (SHIPPED)
 
 - **Data model**: `CalendarEntry` — id, familyId, title, date, type
   (birthday/task/appointment/trip/school/reminder/deadline), linkedTaskId /

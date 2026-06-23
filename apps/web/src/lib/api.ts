@@ -28,6 +28,16 @@ import type {
   CalendarEntry,
   CreateCalendarEntryInput,
   UpdateCalendarEntryInput,
+  Budget,
+  CreateBudgetInput,
+  UpdateBudgetInput,
+  Expense,
+  CreateExpenseInput,
+  UpdateExpenseInput,
+  ExpenseCategory,
+  SavingsGoal,
+  CreateSavingsGoalInput,
+  UpdateSavingsGoalInput,
 } from '@niki/shared';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? '/v1';
@@ -124,5 +134,42 @@ export const api = {
       request<CalendarEntry>('PATCH', `/families/${familyId}/calendar/${entryId}`, input),
     remove: (familyId: string, entryId: string) =>
       request<void>('DELETE', `/families/${familyId}/calendar/${entryId}`),
+  },
+  budgets: {
+    list: (familyId: string, eventId?: string) =>
+      request<Budget[]>('GET', `/families/${familyId}/budgets${eventId ? `?eventId=${eventId}` : ''}`),
+    create: (familyId: string, input: CreateBudgetInput) =>
+      request<Budget>('POST', `/families/${familyId}/budgets`, input),
+    update: (familyId: string, budgetId: string, input: UpdateBudgetInput) =>
+      request<Budget>('PATCH', `/families/${familyId}/budgets/${budgetId}`, input),
+    remove: (familyId: string, budgetId: string) =>
+      request<void>('DELETE', `/families/${familyId}/budgets/${budgetId}`),
+  },
+  expenses: {
+    list: (familyId: string, filter?: { budgetId?: string; category?: ExpenseCategory; from?: string; to?: string }) => {
+      const params = new URLSearchParams();
+      if (filter?.budgetId) params.set('budgetId', filter.budgetId);
+      if (filter?.category) params.set('category', filter.category);
+      if (filter?.from) params.set('from', filter.from);
+      if (filter?.to) params.set('to', filter.to);
+      const qs = params.toString();
+      return request<Expense[]>('GET', `/families/${familyId}/expenses${qs ? `?${qs}` : ''}`);
+    },
+    create: (familyId: string, input: CreateExpenseInput) =>
+      request<Expense>('POST', `/families/${familyId}/expenses`, input),
+    update: (familyId: string, expenseId: string, input: UpdateExpenseInput) =>
+      request<Expense>('PATCH', `/families/${familyId}/expenses/${expenseId}`, input),
+    remove: (familyId: string, expenseId: string) =>
+      request<void>('DELETE', `/families/${familyId}/expenses/${expenseId}`),
+  },
+  savingsGoals: {
+    list: (familyId: string, eventId?: string) =>
+      request<SavingsGoal[]>('GET', `/families/${familyId}/savings-goals${eventId ? `?eventId=${eventId}` : ''}`),
+    create: (familyId: string, input: CreateSavingsGoalInput) =>
+      request<SavingsGoal>('POST', `/families/${familyId}/savings-goals`, input),
+    update: (familyId: string, goalId: string, input: UpdateSavingsGoalInput) =>
+      request<SavingsGoal>('PATCH', `/families/${familyId}/savings-goals/${goalId}`, input),
+    remove: (familyId: string, goalId: string) =>
+      request<void>('DELETE', `/families/${familyId}/savings-goals/${goalId}`),
   },
 };

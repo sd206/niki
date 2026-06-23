@@ -5,3 +5,4 @@ export * from './task';
 export * from './event';
 export * from './vault';
 export * from './calendar';
+export * from './finance';

@@ -1,0 +1,567 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import { useAuth } from '@/lib/useAuth';
+import { api } from '@/lib/api';
+import type {
+  Family,
+  Budget,
+  BudgetPeriod,
+  Expense,
+  ExpenseCategory,
+  SavingsGoal,
+} from '@niki/shared';
+import { BUDGET_PERIODS, EXPENSE_CATEGORIES } from '@niki/shared';
+
+type Tab = 'budgets' | 'expenses' | 'goals';
+
+/**
+ * Single static route (apps/web uses `output: 'export'`), same reason as
+ * /calendar, /vault, /events. Phase 2.B.1 — manual expense entry only;
+ * receipt OCR and voice input are deferred follow-up phases (see
+ * PHASES.md 2.B), so there's no camera/mic affordance here yet.
+ */
+export default function FinancePage() {
+  const { user, loading } = useAuth();
+  const [family, setFamily] = useState<Family | null>(null);
+  const [loadingData, setLoadingData] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [tab, setTab] = useState<Tab>('budgets');
+  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [goals, setGoals] = useState<SavingsGoal[]>([]);
+
+  async function loadAll(familyId: string) {
+    const [b, e, g] = await Promise.all([
+      api.budgets.list(familyId),
+      api.expenses.list(familyId),
+      api.savingsGoals.list(familyId),
+    ]);
+    setBudgets(b);
+    setExpenses(e);
+    setGoals(g);
+  }
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const profile = await api.users.me();
+        if (!profile.familyIds.length) {
+          window.location.href = '/onboarding';
+          return;
+        }
+        const familyId = profile.familyIds[0];
+        const result = await api.families.get(familyId);
+        setFamily(result.family);
+        await loadAll(familyId);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to load finance data');
+      } finally {
+        setLoadingData(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  async function refresh() {
+    if (!family) return;
+    await loadAll(family.id);
+  }
+
+  if (loading || loadingData) {
+    return <div className="container">Loading…</div>;
+  }
+  if (!user) {
+    return <div className="container">Sign in first.</div>;
+  }
+  if (!family) {
+    return null;
+  }
+
+  return (
+    <div className="container">
+      <h1>Finance — {family.name}</h1>
+      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+        {(['budgets', 'expenses', 'goals'] as Tab[]).map((t) => (
+          <button key={t} onClick={() => setTab(t)} style={{ fontWeight: tab === t ? 'bold' : 'normal' }}>
+            {t === 'budgets' ? 'Budgets' : t === 'expenses' ? 'Expenses' : 'Savings Goals'}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        {tab === 'budgets' && (
+          <BudgetsTab familyId={family.id} budgets={budgets} expenses={expenses} onChange={refresh} setError={setError} />
+        )}
+        {tab === 'expenses' && (
+          <ExpensesTab familyId={family.id} expenses={expenses} budgets={budgets} onChange={refresh} setError={setError} />
+        )}
+        {tab === 'goals' && (
+          <SavingsGoalsTab familyId={family.id} goals={goals} onChange={refresh} setError={setError} />
+        )}
+      </div>
+
+      <p style={{ marginTop: 32 }}>
+        <a href="/">Back home</a>
+      </p>
+    </div>
+  );
+}
+
+function money(n: number): string {
+  return n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
+}
+
+// ---------- Budgets ----------
+
+function BudgetsTab({
+  familyId,
+  budgets,
+  expenses,
+  onChange,
+  setError,
+}: {
+  familyId: string;
+  budgets: Budget[];
+  expenses: Expense[];
+  onChange: () => void;
+  setError: (e: string | null) => void;
+}) {
+  const [formOpen, setFormOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [period, setPeriod] = useState<BudgetPeriod>('monthly');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [eventId, setEventId] = useState('');
+  const [allocRows, setAllocRows] = useState<{ category: ExpenseCategory; amount: string }[]>([
+    { category: 'other', amount: '' },
+  ]);
+  const [busy, setBusy] = useState(false);
+
+  function addRow() {
+    setAllocRows((rows) => [...rows, { category: 'other', amount: '' }]);
+  }
+  function updateRow(i: number, patch: Partial<{ category: ExpenseCategory; amount: string }>) {
+    setAllocRows((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
+  function removeRow(i: number) {
+    setAllocRows((rows) => rows.filter((_, idx) => idx !== i));
+  }
+
+  async function handleCreate() {
+    setBusy(true);
+    setError(null);
+    try {
+      const categoryAllocations: Partial<Record<ExpenseCategory, number>> = {};
+      for (const row of allocRows) {
+        const amt = parseFloat(row.amount);
+        if (!isNaN(amt) && amt > 0) categoryAllocations[row.category] = amt;
+      }
+      await api.budgets.create(familyId, {
+        name,
+        period,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        eventId: eventId || undefined,
+        categoryAllocations,
+      });
+      setName('');
+      setPeriod('monthly');
+      setStartDate('');
+      setEndDate('');
+      setEventId('');
+      setAllocRows([{ category: 'other', amount: '' }]);
+      setFormOpen(false);
+      onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to create budget');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete(budgetId: string) {
+    setError(null);
+    try {
+      await api.budgets.remove(familyId, budgetId);
+      onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete budget');
+    }
+  }
+
+  return (
+    <div>
+      {budgets.length === 0 && <p>No budgets yet.</p>}
+      {budgets.map((b) => {
+        const spentByCategory = new Map<string, number>();
+        for (const ex of expenses) {
+          if (ex.budgetId !== b.id) continue;
+          spentByCategory.set(ex.category, (spentByCategory.get(ex.category) ?? 0) + ex.amount);
+        }
+        const categories = Object.keys(b.categoryAllocations) as ExpenseCategory[];
+        return (
+          <div key={b.id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginBottom: 8 }}>
+            <strong>{b.name}</strong> ({b.period}
+            {b.startDate ? ` · ${b.startDate}${b.endDate ? ` – ${b.endDate}` : ''}` : ''})
+            <ul style={{ margin: '8px 0', paddingLeft: 16 }}>
+              {categories.map((cat) => {
+                const allocated = b.categoryAllocations[cat] ?? 0;
+                const spent = spentByCategory.get(cat) ?? 0;
+                const over = spent > allocated;
+                return (
+                  <li key={cat} style={{ fontSize: '0.9em', color: over ? 'crimson' : undefined }}>
+                    {cat}: {money(spent)} / {money(allocated)}
+                  </li>
+                );
+              })}
+              {categories.length === 0 && <li style={{ fontSize: '0.9em', color: '#888' }}>No category allocations set.</li>}
+            </ul>
+            <button onClick={() => handleDelete(b.id)} style={{ color: 'crimson' }}>
+              Delete
+            </button>
+          </div>
+        );
+      })}
+
+      {!formOpen && <button onClick={() => setFormOpen(true)}>+ New budget</button>}
+      {formOpen && (
+        <div style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, maxWidth: 420 }}>
+          <h3 style={{ marginTop: 0 }}>New budget</h3>
+          <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} style={{ width: '100%' }} />
+          <br />
+          <select value={period} onChange={(e) => setPeriod(e.target.value as BudgetPeriod)} style={{ marginTop: 8 }}>
+            {BUDGET_PERIODS.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+          <br />
+          {(period === 'custom' || period === 'event') && (
+            <>
+              <label style={{ marginTop: 8, display: 'inline-block' }}>
+                Start <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              </label>
+              <label style={{ marginLeft: 8 }}>
+                End <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              </label>
+              <br />
+            </>
+          )}
+          {period === 'event' && (
+            <input
+              placeholder="Event ID"
+              value={eventId}
+              onChange={(e) => setEventId(e.target.value)}
+              style={{ marginTop: 8, width: '100%' }}
+            />
+          )}
+
+          <h4 style={{ marginTop: 12, marginBottom: 4 }}>Category allocations</h4>
+          {allocRows.map((row, i) => (
+            <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+              <select
+                value={row.category}
+                onChange={(e) => updateRow(i, { category: e.target.value as ExpenseCategory })}
+              >
+                {EXPENSE_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                placeholder="Amount"
+                value={row.amount}
+                onChange={(e) => updateRow(i, { amount: e.target.value })}
+                style={{ width: 100 }}
+              />
+              <button onClick={() => removeRow(i)}>×</button>
+            </div>
+          ))}
+          <button onClick={addRow}>+ Add category</button>
+          <br />
+          <button className="btn-primary" disabled={busy || !name} onClick={handleCreate} style={{ marginTop: 12 }}>
+            Save
+          </button>
+          <button disabled={busy} onClick={() => setFormOpen(false)} style={{ marginTop: 12, marginLeft: 8 }}>
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- Expenses ----------
+
+function ExpensesTab({
+  familyId,
+  expenses,
+  budgets,
+  onChange,
+  setError,
+}: {
+  familyId: string;
+  expenses: Expense[];
+  budgets: Budget[];
+  onChange: () => void;
+  setError: (e: string | null) => void;
+}) {
+  const [amount, setAmount] = useState('');
+  const [merchant, setMerchant] = useState('');
+  const [date, setDate] = useState('');
+  const [category, setCategory] = useState<ExpenseCategory>('other');
+  const [budgetId, setBudgetId] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const sorted = useMemo(() => [...expenses].sort((a, b) => b.date.localeCompare(a.date)), [expenses]);
+
+  async function handleCreate() {
+    const amt = parseFloat(amount);
+    if (isNaN(amt) || amt <= 0 || !merchant || !date) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.expenses.create(familyId, {
+        amount: amt,
+        merchant,
+        date,
+        category,
+        budgetId: budgetId || undefined,
+      });
+      setAmount('');
+      setMerchant('');
+      setDate('');
+      setCategory('other');
+      setBudgetId('');
+      onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to log expense');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete(expenseId: string) {
+    setError(null);
+    try {
+      await api.expenses.remove(familyId, expenseId);
+      onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete expense');
+    }
+  }
+
+  return (
+    <div>
+      <div style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, maxWidth: 420, marginBottom: 16 }}>
+        <h3 style={{ marginTop: 0 }}>Log an expense</h3>
+        <input
+          type="number"
+          placeholder="Amount"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          style={{ width: '100%' }}
+        />
+        <br />
+        <input
+          placeholder="Merchant"
+          value={merchant}
+          onChange={(e) => setMerchant(e.target.value)}
+          style={{ marginTop: 8, width: '100%' }}
+        />
+        <br />
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ marginTop: 8 }} />
+        <select value={category} onChange={(e) => setCategory(e.target.value as ExpenseCategory)} style={{ marginTop: 8, marginLeft: 8 }}>
+          {EXPENSE_CATEGORIES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+        <br />
+        {budgets.length > 0 && (
+          <select value={budgetId} onChange={(e) => setBudgetId(e.target.value)} style={{ marginTop: 8 }}>
+            <option value="">No budget</option>
+            {budgets.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        )}
+        <br />
+        <button
+          className="btn-primary"
+          disabled={busy || !amount || !merchant || !date}
+          onClick={handleCreate}
+          style={{ marginTop: 8 }}
+        >
+          Add expense
+        </button>
+      </div>
+
+      <ul style={{ listStyle: 'none', padding: 0 }}>
+        {sorted.map((ex) => (
+          <li
+            key={ex.id}
+            style={{
+              border: '1px solid #eee',
+              borderRadius: 6,
+              padding: 8,
+              marginBottom: 4,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <span>
+              {ex.date} — {ex.merchant} ({ex.category})
+            </span>
+            <span>
+              {money(ex.amount)}
+              <button onClick={() => handleDelete(ex.id)} style={{ marginLeft: 8, color: 'crimson' }}>
+                Delete
+              </button>
+            </span>
+          </li>
+        ))}
+        {sorted.length === 0 && <p>No expenses logged yet.</p>}
+      </ul>
+    </div>
+  );
+}
+
+// ---------- Savings Goals ----------
+
+function SavingsGoalsTab({
+  familyId,
+  goals,
+  onChange,
+  setError,
+}: {
+  familyId: string;
+  goals: SavingsGoal[];
+  onChange: () => void;
+  setError: (e: string | null) => void;
+}) {
+  const [name, setName] = useState('');
+  const [targetAmount, setTargetAmount] = useState('');
+  const [targetDate, setTargetDate] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [contributions, setContributions] = useState<Record<string, string>>({});
+
+  async function handleCreate() {
+    const target = parseFloat(targetAmount);
+    if (!name || isNaN(target) || target <= 0) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.savingsGoals.create(familyId, {
+        name,
+        targetAmount: target,
+        currentAmount: 0,
+        targetDate: targetDate || undefined,
+      });
+      setName('');
+      setTargetAmount('');
+      setTargetDate('');
+      onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to create savings goal');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleContribute(goal: SavingsGoal) {
+    const amt = parseFloat(contributions[goal.id] ?? '');
+    if (isNaN(amt) || amt === 0) return;
+    setError(null);
+    try {
+      await api.savingsGoals.update(familyId, goal.id, {
+        currentAmount: Math.max(0, goal.currentAmount + amt),
+      });
+      setContributions((c) => ({ ...c, [goal.id]: '' }));
+      onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to update savings goal');
+    }
+  }
+
+  async function handleDelete(goalId: string) {
+    setError(null);
+    try {
+      await api.savingsGoals.remove(familyId, goalId);
+      onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete savings goal');
+    }
+  }
+
+  return (
+    <div>
+      {goals.map((g) => {
+        const pct = Math.min(100, Math.round((g.currentAmount / g.targetAmount) * 100));
+        return (
+          <div key={g.id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginBottom: 8, maxWidth: 420 }}>
+            <strong>{g.name}</strong>
+            {g.targetDate && <span style={{ color: '#888', fontSize: '0.85em' }}> — by {g.targetDate}</span>}
+            <div style={{ background: '#eee', borderRadius: 4, height: 8, marginTop: 8 }}>
+              <div style={{ background: '#1a3d7c', borderRadius: 4, height: 8, width: `${pct}%` }} />
+            </div>
+            <p style={{ fontSize: '0.9em', margin: '4px 0' }}>
+              {money(g.currentAmount)} / {money(g.targetAmount)} ({pct}%)
+            </p>
+            <input
+              type="number"
+              placeholder="Contribute amount"
+              value={contributions[g.id] ?? ''}
+              onChange={(e) => setContributions((c) => ({ ...c, [g.id]: e.target.value }))}
+              style={{ width: 140 }}
+            />
+            <button onClick={() => handleContribute(g)} style={{ marginLeft: 4 }}>
+              Add
+            </button>
+            <button onClick={() => handleDelete(g.id)} style={{ marginLeft: 8, color: 'crimson' }}>
+              Delete
+            </button>
+          </div>
+        );
+      })}
+      {goals.length === 0 && <p>No savings goals yet.</p>}
+
+      <div style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, maxWidth: 420 }}>
+        <h3 style={{ marginTop: 0 }}>New savings goal</h3>
+        <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} style={{ width: '100%' }} />
+        <br />
+        <input
+          type="number"
+          placeholder="Target amount"
+          value={targetAmount}
+          onChange={(e) => setTargetAmount(e.target.value)}
+          style={{ marginTop: 8 }}
+        />
+        <label style={{ marginLeft: 8 }}>
+          Target date (optional) <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
+        </label>
+        <br />
+        <button
+          className="btn-primary"
+          disabled={busy || !name || !targetAmount}
+          onClick={handleCreate}
+          style={{ marginTop: 8 }}
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  );
+}

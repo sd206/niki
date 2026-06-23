@@ -156,21 +156,35 @@ manually verified before starting the next — mirrors how Phase 0 was run.
 
 ### 2.B — Finance Hub
 
-Largest module in Phase 2 — likely worth its own sub-breakdown when we get
-here. Rough shape:
+Split per the 2.B.1/2.B.2/2.B.3 proposal below, confirmed with the user.
+
+#### 2.B.1 — Manual expense entry (SHIPPED)
 
 - **Data model**: `Budget` (family-level or event-level, period, category
   allocations), `Expense` (amount, merchant, date, category, source:
   manual/receipt/voice, receiptVaultItemId optional link to 1.D Vault),
-  `SavingsGoal` (name, targetAmount, currentAmount, targetDate)
-- **API**: CRUD for all three; expense creation supports manual entry first
-  (receipt OCR and voice input are PRD MVP-included but meaningfully more
-  infra — Document AI / Speech-to-Text wiring — so propose splitting those
-  into 2.B.1 manual entry, 2.B.2 receipt OCR, 2.B.3 voice input)
-- **Web UI**: budget dashboard, expense list/entry form, savings goal
-  tracker
-- **Deferred**: bank integrations (Plaid) — explicitly PRD-excluded from
-  MVP
+  `SavingsGoal` (name, targetAmount, currentAmount, targetDate) —
+  `packages/shared/src/finance.ts`
+- **API**: CRUD for all three at `/v1/families/:familyId/{budgets,expenses,savings-goals}`.
+  Expense creation always writes `source: 'manual'` this phase regardless of
+  request body — `apps/api/src/routes/{budgets,expenses,savingsGoals}.ts`
+- **Web UI**: `/finance` — budget dashboard (per-category spent-vs-allocated),
+  expense list/entry form, savings goal tracker with contributions —
+  `apps/web/src/app/finance/page.tsx`
+- Savings goal "contributions" are a plain PATCH bumping `currentAmount` —
+  no separate transaction/ledger log this phase.
+
+#### 2.B.2 — Receipt OCR (deferred)
+
+- Document AI wiring to extract amount/merchant/date from a photographed
+  receipt, linking the source vault item via `receiptVaultItemId`.
+
+#### 2.B.3 — Voice input (deferred)
+
+- Speech-to-Text wiring for voice-logged expenses.
+
+- **Deferred (all of 2.B)**: bank integrations (Plaid) — explicitly
+  PRD-excluded from MVP
 
 ---
 
@@ -220,8 +234,8 @@ building this earlier would mean indexing against a schema still in flux.
 
 - **Phase 1**: confirm build order (proposed: 1.A → 1.B → 1.C → 1.D) and
   MVP-vs-full-depth per module
-- **Phase 2.B**: confirm whether receipt OCR / voice expense entry ship in
-  the same pass as manual entry, or as separate follow-up milestones
+- **Phase 2.B**: resolved — manual entry (2.B.1) shipped first; receipt OCR
+  (2.B.2) and voice input (2.B.3) deferred to separate follow-up milestones
 - **Phase 4.A**: pick the vector search approach (Postgres+pgvector as a
   second datastore vs. Vertex AI Vector Search vs. a Firestore extension)
   before any embedding-generation code gets written

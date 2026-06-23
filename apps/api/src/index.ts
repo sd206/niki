@@ -9,6 +9,9 @@ import { tasksRouter } from './routes/tasks';
 import { eventsRouter } from './routes/events';
 import { vaultRouter } from './routes/vault';
 import { calendarRouter } from './routes/calendar';
+import { budgetsRouter } from './routes/budgets';
+import { expensesRouter } from './routes/expenses';
+import { savingsGoalsRouter } from './routes/savingsGoals';
 import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -60,6 +63,9 @@ app.use('/v1/families/:familyId/tasks', tasksRouter);
 app.use('/v1/families/:familyId/events', eventsRouter);
 app.use('/v1/families/:familyId/vault', vaultRouter);
 app.use('/v1/families/:familyId/calendar', calendarRouter);
+app.use('/v1/families/:familyId/budgets', budgetsRouter);
+app.use('/v1/families/:familyId/expenses', expensesRouter);
+app.use('/v1/families/:familyId/savings-goals', savingsGoalsRouter);
 app.use('/v1/drive', driveRouter);
 
 app.use((req: Request, res: Response, _next: NextFunction) => {

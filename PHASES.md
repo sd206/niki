@@ -188,25 +188,46 @@ Split per the 2.B.1/2.B.2/2.B.3 proposal below, confirmed with the user.
 
 ---
 
-## Phase 3 — Knowledge Hub, Memories
+## Phase 3 — Knowledge Hub, Memories (SHIPPED)
 
-### 3.A — Knowledge Hub
+### 3.A — Knowledge Hub (SHIPPED)
 
 - **Data model**: `KnowledgeEntry` — id, familyId, title, contentType
   (recipe/instructions/tradition/emergency_plan/reference/idea), body (rich
   text or linked doc), tags. Stored at `families/{familyId}/knowledge/{id}`.
-- **API**: CRUD + basic tag/title search (AI-powered search is Phase 4)
-- **Web UI**: list/detail/edit, simple search box
+  `packages/shared/src/knowledge.ts`.
+- **API**: CRUD + basic tag/title search (AI-powered search is Phase 4).
+  `apps/api/src/routes/knowledge.ts` — `contentType` is a real Firestore
+  `.where()` filter; `q` (title/tag substring) and `tag` (exact membership)
+  are in-memory filters after fetch, since Firestore has no native text
+  search.
+- **Web UI**: list/detail/edit, simple search box. Single static route
+  `apps/web/src/app/knowledge/page.tsx` (expand-in-place, no dynamic `[id]`
+  route, consistent with `output: 'export'`).
 
-### 3.B — Memories
+### 3.B — Memories (SHIPPED)
 
 - **Data model**: `Memory` — id, familyId, title, type
   (photo/video/story/milestone/achievement/voice_note/document), driveFileId
   (optional, same Drive-reference pattern as Vault), eventId (optional
-  link), date, description
-- **API**: CRUD + list-by-event, list-by-date-range
-- **Web UI**: timeline/gallery view, "add memory" flow (Drive picker, same
-  as Vault)
+  link), date, description. `packages/shared/src/memories.ts`. Unlike
+  Vault, has a real `updatedAt`-free PATCH endpoint since the PRD calls
+  for full CRUD here.
+- **API**: CRUD + list-by-event, list-by-date-range.
+  `apps/api/src/routes/memories.ts` — `eventId`/`from`/`to` are Firestore
+  `.where()` filters; results sorted by date desc. DELETE only removes the
+  Firestore reference, never the underlying Drive file (same as Vault).
+- **Web UI**: timeline view, "add memory" flow (Drive picker, same as
+  Vault, but optional — a 'story' memory can be pure text).
+  `apps/web/src/app/memories/page.tsx`.
+
+### Open decisions to revisit
+
+- Knowledge search is substring-match only; AI-powered semantic search is
+  explicitly deferred to Phase 4.D.
+- Memories' web UI doesn't yet expose the API's `eventId`/date-range
+  filters — the timeline just lists everything sorted by date. Revisit if
+  family memory volume makes that unwieldy.
 
 ---
 

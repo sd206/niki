@@ -61,6 +61,10 @@ export default function HomePage() {
         {' · '}
         <a href="/finance">Finance</a>
         {' · '}
+        <a href="/knowledge">Knowledge</a>
+        {' · '}
+        <a href="/memories">Memories</a>
+        {' · '}
         <a href="/settings">Settings</a>
       </p>
       <button onClick={() => signOutUser()} style={{ marginTop: 16 }}>

@@ -38,6 +38,13 @@ import type {
   SavingsGoal,
   CreateSavingsGoalInput,
   UpdateSavingsGoalInput,
+  KnowledgeEntry,
+  CreateKnowledgeEntryInput,
+  UpdateKnowledgeEntryInput,
+  KnowledgeContentType,
+  Memory,
+  CreateMemoryInput,
+  UpdateMemoryInput,
 } from '@niki/shared';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? '/v1';
@@ -171,5 +178,39 @@ export const api = {
       request<SavingsGoal>('PATCH', `/families/${familyId}/savings-goals/${goalId}`, input),
     remove: (familyId: string, goalId: string) =>
       request<void>('DELETE', `/families/${familyId}/savings-goals/${goalId}`),
+  },
+  knowledge: {
+    list: (familyId: string, filter?: { q?: string; tag?: string; contentType?: KnowledgeContentType }) => {
+      const params = new URLSearchParams();
+      if (filter?.q) params.set('q', filter.q);
+      if (filter?.tag) params.set('tag', filter.tag);
+      if (filter?.contentType) params.set('contentType', filter.contentType);
+      const qs = params.toString();
+      return request<KnowledgeEntry[]>('GET', `/families/${familyId}/knowledge${qs ? `?${qs}` : ''}`);
+    },
+    get: (familyId: string, entryId: string) =>
+      request<KnowledgeEntry>('GET', `/families/${familyId}/knowledge/${entryId}`),
+    create: (familyId: string, input: CreateKnowledgeEntryInput) =>
+      request<KnowledgeEntry>('POST', `/families/${familyId}/knowledge`, input),
+    update: (familyId: string, entryId: string, input: UpdateKnowledgeEntryInput) =>
+      request<KnowledgeEntry>('PATCH', `/families/${familyId}/knowledge/${entryId}`, input),
+    remove: (familyId: string, entryId: string) =>
+      request<void>('DELETE', `/families/${familyId}/knowledge/${entryId}`),
+  },
+  memories: {
+    list: (familyId: string, filter?: { eventId?: string; from?: string; to?: string }) => {
+      const params = new URLSearchParams();
+      if (filter?.eventId) params.set('eventId', filter.eventId);
+      if (filter?.from) params.set('from', filter.from);
+      if (filter?.to) params.set('to', filter.to);
+      const qs = params.toString();
+      return request<Memory[]>('GET', `/families/${familyId}/memories${qs ? `?${qs}` : ''}`);
+    },
+    create: (familyId: string, input: CreateMemoryInput) =>
+      request<Memory>('POST', `/families/${familyId}/memories`, input),
+    update: (familyId: string, memoryId: string, input: UpdateMemoryInput) =>
+      request<Memory>('PATCH', `/families/${familyId}/memories/${memoryId}`, input),
+    remove: (familyId: string, memoryId: string) =>
+      request<void>('DELETE', `/families/${familyId}/memories/${memoryId}`),
   },
 };

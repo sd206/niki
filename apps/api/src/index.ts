@@ -12,6 +12,8 @@ import { calendarRouter } from './routes/calendar';
 import { budgetsRouter } from './routes/budgets';
 import { expensesRouter } from './routes/expenses';
 import { savingsGoalsRouter } from './routes/savingsGoals';
+import { knowledgeRouter } from './routes/knowledge';
+import { memoriesRouter } from './routes/memories';
 import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -66,6 +68,8 @@ app.use('/v1/families/:familyId/calendar', calendarRouter);
 app.use('/v1/families/:familyId/budgets', budgetsRouter);
 app.use('/v1/families/:familyId/expenses', expensesRouter);
 app.use('/v1/families/:familyId/savings-goals', savingsGoalsRouter);
+app.use('/v1/families/:familyId/knowledge', knowledgeRouter);
+app.use('/v1/families/:familyId/memories', memoriesRouter);
 app.use('/v1/drive', driveRouter);
 
 app.use((req: Request, res: Response, _next: NextFunction) => {

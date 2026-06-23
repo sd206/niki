@@ -7,7 +7,22 @@
  * Development: set NEXT_PUBLIC_API_URL=http://localhost:8080/v1 in .env.local.
  */
 import { auth } from './firebase';
-import type { Family, Member, Invite, UserProfile, DriveConnection, CreateFamilyInput, CreateInviteInput } from '@niki/shared';
+import type {
+  Family,
+  Member,
+  Invite,
+  UserProfile,
+  DriveConnection,
+  CreateFamilyInput,
+  CreateInviteInput,
+  Task,
+  CreateTaskInput,
+  UpdateTaskInput,
+  TaskStatus,
+  Event,
+  CreateEventInput,
+  UpdateEventInput,
+} from '@niki/shared';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? '/v1';
 
@@ -57,5 +72,31 @@ export const api = {
     status: () => request<DriveConnection>('GET', '/drive/status'),
     connect: (redirectTo?: string) =>
       request<{ url: string }>('POST', '/drive/connect', redirectTo ? { redirectTo } : undefined),
+  },
+  tasks: {
+    list: (familyId: string, filter?: { status?: TaskStatus; assignedTo?: string }) => {
+      const params = new URLSearchParams();
+      if (filter?.status) params.set('status', filter.status);
+      if (filter?.assignedTo) params.set('assignedTo', filter.assignedTo);
+      const qs = params.toString();
+      return request<Task[]>('GET', `/families/${familyId}/tasks${qs ? `?${qs}` : ''}`);
+    },
+    create: (familyId: string, input: CreateTaskInput) =>
+      request<Task>('POST', `/families/${familyId}/tasks`, input),
+    update: (familyId: string, taskId: string, input: UpdateTaskInput) =>
+      request<Task>('PATCH', `/families/${familyId}/tasks/${taskId}`, input),
+    remove: (familyId: string, taskId: string) =>
+      request<void>('DELETE', `/families/${familyId}/tasks/${taskId}`),
+  },
+  events: {
+    list: (familyId: string) => request<Event[]>('GET', `/families/${familyId}/events`),
+    get: (familyId: string, eventId: string) =>
+      request<{ event: Event; tasks: Task[] }>('GET', `/families/${familyId}/events/${eventId}`),
+    create: (familyId: string, input: CreateEventInput) =>
+      request<Event>('POST', `/families/${familyId}/events`, input),
+    update: (familyId: string, eventId: string, input: UpdateEventInput) =>
+      request<Event>('PATCH', `/families/${familyId}/events/${eventId}`, input),
+    remove: (familyId: string, eventId: string) =>
+      request<void>('DELETE', `/families/${familyId}/events/${eventId}`),
   },
 };

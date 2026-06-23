@@ -46,10 +46,14 @@ export default function HomePage() {
           </a>
         </>
       ) : (
-        <p>{profile?.familyIds.length} family(ies). Modules (Vault, Events, Tasks…) land in later phases.</p>
+        <p>{profile?.familyIds.length} family(ies). Vault lands in a later phase.</p>
       )}
       <p style={{ marginTop: 32 }}>
         <a href="/family">Family</a>
+        {' · '}
+        <a href="/tasks">Tasks</a>
+        {' · '}
+        <a href="/events">Events</a>
         {' · '}
         <a href="/settings">Settings</a>
       </p>

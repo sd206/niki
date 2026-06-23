@@ -5,6 +5,8 @@ import morgan from 'morgan';
 import { usersRouter } from './routes/users';
 import { familiesRouter } from './routes/families';
 import { driveRouter } from './routes/drive';
+import { tasksRouter } from './routes/tasks';
+import { eventsRouter } from './routes/events';
 import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -52,6 +54,8 @@ app.get('/health', (_req: Request, res: Response) => res.json({ status: 'ok' }))
 
 app.use('/v1/users', usersRouter);
 app.use('/v1/families', familiesRouter);
+app.use('/v1/families/:familyId/tasks', tasksRouter);
+app.use('/v1/families/:familyId/events', eventsRouter);
 app.use('/v1/drive', driveRouter);
 
 app.use((req: Request, res: Response, _next: NextFunction) => {

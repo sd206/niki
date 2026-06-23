@@ -8,8 +8,17 @@ jobs:
   deploy-web:
     name: Deploy Web to Firebase Hosting
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/682530198245/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: 'niki-deployer@niki-app-prod.iam.gserviceaccount.com'
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -39,7 +48,7 @@ jobs:
           NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
 
       - name: Deploy Firebase Hosting + Firestore rules
-        run: firebase deploy --only hosting,firestore --token "${{ secrets.FIREBASE_TOKEN }}" --project "${{ secrets.FIREBASE_PROJECT_ID }}"
+        run: firebase deploy --only hosting,firestore --project "${{ secrets.FIREBASE_PROJECT_ID }}"
 
   deploy-api:
     name: Deploy API to Cloud Run via Cloud Build

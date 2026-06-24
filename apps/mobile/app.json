@@ -12,8 +12,16 @@
       "bundleIdentifier": "com.niki.app"
     },
     "android": {
-      "package": "com.niki.app"
+      "package": "com.niki.app",
+      "permissions": ["RECORD_AUDIO"]
     },
-    "plugins": []
+    "plugins": [
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Niki needs microphone access so you can speak an expense instead of typing it."
+        }
+      ]
+    ]
   }
 }

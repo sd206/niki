@@ -3,7 +3,8 @@
   "compilerOptions": {
     "strict": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@niki/shared": ["../../packages/shared/src/index.ts"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"]

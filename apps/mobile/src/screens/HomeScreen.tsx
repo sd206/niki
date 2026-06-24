@@ -3,7 +3,13 @@ import { View, Text, Button, StyleSheet } from 'react-native';
 import { api } from '@/lib/api';
 import type { UserProfile } from '@niki/shared';
 
-export default function HomeScreen({ onOpenSettings }: { onOpenSettings: () => void }) {
+export default function HomeScreen({
+  onOpenSettings,
+  onOpenVoiceExpense,
+}: {
+  onOpenSettings: () => void;
+  onOpenVoiceExpense?: () => void;
+}) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
@@ -17,7 +23,12 @@ export default function HomeScreen({ onOpenSettings }: { onOpenSettings: () => v
         {profile?.familyIds.length ?? 0} family(ies). Modules (Vault, Events, Tasks…) land in
         later phases.
       </Text>
-      <View style={{ marginTop: 32 }}>
+      {onOpenVoiceExpense && (
+        <View style={{ marginTop: 24 }}>
+          <Button title="🎤 Speak an expense" onPress={onOpenVoiceExpense} />
+        </View>
+      )}
+      <View style={{ marginTop: 16 }}>
         <Button title="Settings" onPress={onOpenSettings} />
       </View>
     </View>

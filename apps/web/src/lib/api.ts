@@ -54,6 +54,8 @@ import type {
   FinancialCoachingResponse,
   KnowledgeSummaryResponse,
   KnowledgeDigestResponse,
+  ReceiptExtraction,
+  VoiceExpenseDraft,
 } from '@niki/shared';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? '/v1';
@@ -188,6 +190,14 @@ export const api = {
       request<Expense>('PATCH', `/families/${familyId}/expenses/${expenseId}`, input),
     remove: (familyId: string, expenseId: string) =>
       request<void>('DELETE', `/families/${familyId}/expenses/${expenseId}`),
+    // 2.B.2 — runs Document AI over an existing Vault item; returns a draft
+    // to pre-fill the create form, never writes an Expense itself.
+    extractReceipt: (familyId: string, vaultItemId: string) =>
+      request<ReceiptExtraction>('POST', `/families/${familyId}/expenses/extract-receipt`, { vaultItemId }),
+    // 2.B.3 — transcribes a short recorded clip (base64) and best-effort
+    // extracts structured fields via Gemini; also just a draft.
+    transcribeVoice: (familyId: string, audioBase64: string) =>
+      request<VoiceExpenseDraft>('POST', `/families/${familyId}/expenses/transcribe-voice`, { audioBase64 }),
   },
   savingsGoals: {
     list: (familyId: string, eventId?: string) =>

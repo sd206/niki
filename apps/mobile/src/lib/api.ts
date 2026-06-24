@@ -19,6 +19,9 @@ import type {
   DriveConnection,
   CreateFamilyInput,
   CreateInviteInput,
+  Expense,
+  CreateExpenseInput,
+  VoiceExpenseDraft,
 } from '@niki/shared';
 
 const BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://niki-app-d035f.web.app/v1';
@@ -69,5 +72,15 @@ export const api = {
     status: () => request<DriveConnection>('GET', '/drive/status'),
     connect: (redirectTo?: string) =>
       request<{ url: string }>('POST', '/drive/connect', redirectTo ? { redirectTo } : undefined),
+  },
+  // Phase 2.B.3 — mobile only needs voice-expense capture today (the user's
+  // explicit choice to ship web + mobile simultaneously); other Finance Hub
+  // screens (budgets, savings goals, full expense list) stay web-only until
+  // the mobile app grows beyond this minimal skeleton.
+  expenses: {
+    create: (familyId: string, input: CreateExpenseInput) =>
+      request<Expense>('POST', `/families/${familyId}/expenses`, input),
+    transcribeVoice: (familyId: string, audioBase64: string) =>
+      request<VoiceExpenseDraft>('POST', `/families/${familyId}/expenses/transcribe-voice`, { audioBase64 }),
   },
 };

@@ -7,22 +7,28 @@ import SignInScreen from '@/screens/SignInScreen';
 import OnboardingScreen from '@/screens/OnboardingScreen';
 import HomeScreen from '@/screens/HomeScreen';
 import SettingsScreen from '@/screens/SettingsScreen';
+import VoiceExpenseScreen from '@/screens/VoiceExpenseScreen';
 
-type Screen = 'home' | 'settings';
+type Screen = 'home' | 'settings' | 'voiceExpense';
 
 export default function App() {
   const { user, loading } = useAuth();
   const [hasFamily, setHasFamily] = useState<boolean | null>(null);
+  const [familyId, setFamilyId] = useState<string | null>(null);
   const [screen, setScreen] = useState<Screen>('home');
 
   useEffect(() => {
     if (!user) {
       setHasFamily(null);
+      setFamilyId(null);
       return;
     }
     api.users
       .me()
-      .then((profile) => setHasFamily(profile.familyIds.length > 0))
+      .then((profile) => {
+        setHasFamily(profile.familyIds.length > 0);
+        setFamilyId(profile.familyIds[0] ?? null);
+      })
       .catch(() => setHasFamily(false));
   }, [user]);
 
@@ -54,10 +60,15 @@ export default function App() {
 
   return (
     <>
-      {screen === 'home' ? (
-        <HomeScreen onOpenSettings={() => setScreen('settings')} />
-      ) : (
-        <SettingsScreen />
+      {screen === 'home' && (
+        <HomeScreen
+          onOpenSettings={() => setScreen('settings')}
+          onOpenVoiceExpense={familyId ? () => setScreen('voiceExpense') : undefined}
+        />
+      )}
+      {screen === 'settings' && <SettingsScreen />}
+      {screen === 'voiceExpense' && familyId && (
+        <VoiceExpenseScreen familyId={familyId} onBack={() => setScreen('home')} />
       )}
       <StatusBar style="auto" />
     </>

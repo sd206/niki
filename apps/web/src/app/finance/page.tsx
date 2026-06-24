@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/lib/useAuth';
 import { api } from '@/lib/api';
 import type {
@@ -9,8 +9,10 @@ import type {
   BudgetPeriod,
   Expense,
   ExpenseCategory,
+  ExpenseSource,
   SavingsGoal,
   FinancialCoachingResponse,
+  VaultItem,
 } from '@niki/shared';
 import { BUDGET_PERIODS, EXPENSE_CATEGORIES } from '@niki/shared';
 
@@ -18,9 +20,10 @@ type Tab = 'budgets' | 'expenses' | 'goals' | 'coaching';
 
 /**
  * Single static route (apps/web uses `output: 'export'`), same reason as
- * /calendar, /vault, /events. Phase 2.B.1 — manual expense entry only;
- * receipt OCR and voice input are deferred follow-up phases (see
- * PHASES.md 2.B), so there's no camera/mic affordance here yet.
+ * /calendar, /vault, /events. Phase 2.B.2/2.B.3 add receipt OCR (pick an
+ * existing Vault item) and voice input (record + transcribe) as alternate
+ * ways to pre-fill the expense form below — both always land in the same
+ * reviewable form, never auto-submit (see ExpensesTab).
  */
 export default function FinancePage() {
   const { user, loading } = useAuth();
@@ -329,7 +332,37 @@ function ExpensesTab({
   const [budgetId, setBudgetId] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // 2.B.2/2.B.3 — provenance of whatever's currently in the form above.
+  // Reset to 'manual' whenever the form is cleared/submitted; set to
+  // 'receipt'/'voice' only right after a successful extraction/transcription.
+  const [source, setSource] = useState<ExpenseSource>('manual');
+  const [receiptVaultItemId, setReceiptVaultItemId] = useState<string | undefined>(undefined);
+
+  // 2.B.2 — receipt OCR over an existing Vault item (never a fresh upload).
+  const [showReceiptPicker, setShowReceiptPicker] = useState(false);
+  const [vaultItems, setVaultItems] = useState<VaultItem[]>([]);
+  const [selectedVaultItemId, setSelectedVaultItemId] = useState('');
+  const [extracting, setExtracting] = useState(false);
+
+  // 2.B.3 — voice capture via MediaRecorder, transcribed + best-effort parsed.
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [transcript, setTranscript] = useState('');
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
+
   const sorted = useMemo(() => [...expenses].sort((a, b) => b.date.localeCompare(a.date)), [expenses]);
+
+  function resetForm() {
+    setAmount('');
+    setMerchant('');
+    setDate('');
+    setCategory('other');
+    setBudgetId('');
+    setSource('manual');
+    setReceiptVaultItemId(undefined);
+    setTranscript('');
+  }
 
   async function handleCreate() {
     const amt = parseFloat(amount);
@@ -343,18 +376,104 @@ function ExpensesTab({
         date,
         category,
         budgetId: budgetId || undefined,
+        receiptVaultItemId,
+        source,
       });
-      setAmount('');
-      setMerchant('');
-      setDate('');
-      setCategory('other');
-      setBudgetId('');
+      resetForm();
       onChange();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to log expense');
     } finally {
       setBusy(false);
     }
+  }
+
+  // ----- Receipt OCR -----
+
+  async function openReceiptPicker() {
+    setShowReceiptPicker(true);
+    if (vaultItems.length === 0) {
+      try {
+        const items = await api.vault.list(familyId);
+        setVaultItems(items);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to load Vault items');
+      }
+    }
+  }
+
+  async function handleExtract() {
+    if (!selectedVaultItemId) return;
+    setExtracting(true);
+    setError(null);
+    try {
+      const extraction = await api.expenses.extractReceipt(familyId, selectedVaultItemId);
+      if (extraction.amount !== undefined) setAmount(String(extraction.amount));
+      if (extraction.merchant !== undefined) setMerchant(extraction.merchant);
+      if (extraction.date !== undefined) setDate(extraction.date);
+      setReceiptVaultItemId(selectedVaultItemId);
+      setSource('receipt');
+      setShowReceiptPicker(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to extract receipt — review/fill in the fields manually');
+    } finally {
+      setExtracting(false);
+    }
+  }
+
+  // ----- Voice input -----
+
+  function blobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve((reader.result as string).split(',')[1] ?? '');
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function handleTranscribe(blob: Blob) {
+    setTranscribing(true);
+    setError(null);
+    try {
+      const base64 = await blobToBase64(blob);
+      const draft = await api.expenses.transcribeVoice(familyId, base64);
+      setTranscript(draft.transcript);
+      if (draft.amount !== undefined) setAmount(String(draft.amount));
+      if (draft.merchant !== undefined) setMerchant(draft.merchant);
+      if (draft.category !== undefined) setCategory(draft.category);
+      if (draft.date !== undefined) setDate(draft.date);
+      setSource('voice');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to transcribe voice input');
+    } finally {
+      setTranscribing(false);
+    }
+  }
+
+  async function startRecording() {
+    setError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => chunksRef.current.push(e.data);
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mr.mimeType });
+        stream.getTracks().forEach((t) => t.stop());
+        handleTranscribe(blob);
+      };
+      mediaRecorderRef.current = mr;
+      mr.start();
+      setRecording(true);
+    } catch {
+      setError('Microphone access denied or unavailable');
+    }
+  }
+
+  function stopRecording() {
+    mediaRecorderRef.current?.stop();
+    setRecording(false);
   }
 
   async function handleDelete(expenseId: string) {
@@ -371,6 +490,51 @@ function ExpensesTab({
     <div>
       <div style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, maxWidth: 420, marginBottom: 16 }}>
         <h3 style={{ marginTop: 0 }}>Log an expense</h3>
+
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+          <button type="button" onClick={openReceiptPicker} disabled={extracting}>
+            {extracting ? 'Scanning…' : '📷 Scan a receipt'}
+          </button>
+          <button type="button" onClick={recording ? stopRecording : startRecording} disabled={transcribing}>
+            {transcribing ? 'Transcribing…' : recording ? '⏹ Stop recording' : '🎤 Speak an expense'}
+          </button>
+        </div>
+
+        {showReceiptPicker && (
+          <div style={{ border: '1px solid #eee', borderRadius: 6, padding: 8, marginBottom: 10 }}>
+            <p style={{ margin: '0 0 6px', fontSize: '0.85em', color: '#666' }}>
+              Pick a receipt already added to Vault — its photo is scanned on demand, never stored separately.
+            </p>
+            {vaultItems.length === 0 && <p style={{ fontSize: '0.85em', color: '#888' }}>No Vault items found.</p>}
+            <select value={selectedVaultItemId} onChange={(e) => setSelectedVaultItemId(e.target.value)}>
+              <option value="">Choose a Vault item…</option>
+              {vaultItems.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+            <button onClick={handleExtract} disabled={!selectedVaultItemId || extracting} style={{ marginLeft: 6 }}>
+              Extract
+            </button>
+            <button onClick={() => setShowReceiptPicker(false)} style={{ marginLeft: 6 }}>
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {transcript && (
+          <p style={{ fontSize: '0.85em', color: '#666', fontStyle: 'italic', marginBottom: 10 }}>
+            Heard: "{transcript}"
+          </p>
+        )}
+
+        {source !== 'manual' && (
+          <p style={{ fontSize: '0.8em', color: '#1a3d7c', marginBottom: 6 }}>
+            Pre-filled from {source === 'receipt' ? 'receipt scan' : 'voice'} — review before saving.
+          </p>
+        )}
+
         <input
           type="number"
           placeholder="Amount"

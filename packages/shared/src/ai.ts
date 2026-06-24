@@ -118,3 +118,52 @@ export const KnowledgeDigestResponseSchema = z.object({
   highlights: z.array(z.string()),
 });
 export type KnowledgeDigestResponse = z.infer<typeof KnowledgeDigestResponseSchema>;
+
+/**
+ * Phase 2.B.2 — Receipt OCR. Document AI's receipt/expense processor already
+ * returns typed entities (supplier name, total amount, receipt date) — this
+ * is a deterministic mapping of those entities, not an LLM call (see
+ * apps/api/src/lib/documentAi.ts). Every field is optional: Document AI may
+ * not confidently extract all three from a given receipt, and the web/mobile
+ * UI pre-fills whatever came back into the expense form for the user to
+ * complete and review — it never auto-saves an Expense from this response.
+ */
+export const ReceiptExtractionSchema = z.object({
+  merchant: z.string().optional(),
+  amount: z.number().optional(),
+  date: z.string().optional(),
+});
+export type ReceiptExtraction = z.infer<typeof ReceiptExtractionSchema>;
+
+/**
+ * Phase 2.B.3 — Voice input. `transcript` is always populated (Speech-to-Text,
+ * deterministic ASR) and shown verbatim to the user for transparency/review.
+ * The structured fields are Gemini's best-effort extraction from that free
+ * text — unlike 4.C's protected dollar figures, there's no "true number" to
+ * guard here (the only source of truth is the spoken words themselves), so
+ * this follows 4.D's precedent: genuinely needs an LLM, no deterministic
+ * fallback. If Vertex AI isn't configured, `transcript` is still returned
+ * (Speech-to-Text and Gemini are independent dependencies) with every
+ * structured field omitted, so the user can still see what was heard and
+ * type the rest manually rather than getting a hard error.
+ */
+export const VoiceExpenseDraftSchema = z.object({
+  transcript: z.string(),
+  amount: z.number().optional(),
+  merchant: z.string().optional(),
+  category: ExpenseCategorySchema.optional(),
+  date: z.string().optional(),
+});
+export type VoiceExpenseDraft = z.infer<typeof VoiceExpenseDraftSchema>;
+
+/** POST /expenses/extract-receipt body — an existing Vault item, not a fresh upload (see PHASES.md 2.B.2). */
+export const ExtractReceiptInputSchema = z.object({
+  vaultItemId: z.string(),
+});
+export type ExtractReceiptInput = z.infer<typeof ExtractReceiptInputSchema>;
+
+/** POST /expenses/transcribe-voice body — a short recorded clip, base64-encoded. */
+export const TranscribeVoiceInputSchema = z.object({
+  audioBase64: z.string().min(1),
+});
+export type TranscribeVoiceInput = z.infer<typeof TranscribeVoiceInputSchema>;

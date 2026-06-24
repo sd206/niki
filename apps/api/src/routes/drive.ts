@@ -116,7 +116,7 @@ driveRouter.get('/status', authenticate, async (req: AuthedRequest, res, next) =
   try {
     const snap = await db.collection('driveConnections').doc(req.uid!).get();
     if (!snap.exists) {
-      return res.json({ uid: req.uid, status: 'disconnected', scopes: [] } satisfies DriveConnection);
+      return res.json({ uid: req.uid!, status: 'disconnected', scopes: [] } satisfies DriveConnection);
     }
     return res.json(snap.data() as DriveConnection);
   } catch (err) {

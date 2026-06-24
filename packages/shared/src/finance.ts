@@ -1,12 +1,13 @@
 import { z } from 'zod';
 
 /**
- * Per PHASES.md 2.B, this phase (2.B.1) ships manual expense entry only.
- * Receipt OCR (2.B.2, Document AI) and voice input (2.B.3, Speech-to-Text)
- * are deferred follow-up phases. The `source` enum is modeled per the PRD's
- * full data shape now so Expense.source doesn't need a breaking migration
- * later — but CreateExpenseInputSchema (below) only allows 'manual', and
- * the API only ever writes 'manual' for now.
+ * Per PHASES.md 2.B, 2.B.1 shipped manual expense entry; 2.B.2 (Document AI
+ * receipt OCR) and 2.B.3 (Speech-to-Text + Gemini voice input) extend the
+ * same Expense shape with extraction *drafts* (see ReceiptExtraction /
+ * VoiceExpenseDraft in ai.ts) — neither extraction step writes an Expense
+ * itself. The user always reviews the pre-filled draft and explicitly
+ * submits via the same POST below, same "always draft, never auto-create"
+ * principle as 4.B/4.E.
  */
 export const EXPENSE_SOURCES = ['manual', 'receipt', 'voice'] as const;
 export const ExpenseSourceSchema = z.enum(EXPENSE_SOURCES);
@@ -100,7 +101,15 @@ export const CreateExpenseInputSchema = z.object({
   category: ExpenseCategorySchema.default('other'),
   budgetId: z.string().optional(),
   receiptVaultItemId: z.string().optional(),
-  // No `source` field here — the API always writes 'manual' for this phase.
+  // Optional provenance tag — defaults to 'manual' server-side if omitted.
+  // This is metadata about *how the user filled out the form*, not a
+  // security-sensitive field, so trusting the client here (rather than
+  // inferring it, e.g. from receiptVaultItemId being set) is deliberate:
+  // it correctly distinguishes "OCR draft the user then hand-edited
+  // entirely" from "OCR draft accepted as-is" — both legitimately
+  // 'receipt', but inference from receiptVaultItemId alone can't tell a
+  // voice-originated entry from a manual one at all.
+  source: ExpenseSourceSchema.optional(),
 });
 export type CreateExpenseInput = z.infer<typeof CreateExpenseInputSchema>;
 

@@ -214,14 +214,158 @@ Split per the 2.B.1/2.B.2/2.B.3 proposal below, confirmed with the user.
 - Savings goal "contributions" are a plain PATCH bumping `currentAmount` —
   no separate transaction/ledger log this phase.
 
-#### 2.B.2 — Receipt OCR (deferred)
+#### 2.B.2 — Receipt OCR (SHIPPED)
 
-- Document AI wiring to extract amount/merchant/date from a photographed
-  receipt, linking the source vault item via `receiptVaultItemId`.
+Extracts amount/merchant/date from a receipt already in Vault (1.D) via
+Document AI — never a new upload path, since Vault already owns "get bytes
+from Drive."
 
-#### 2.B.3 — Voice input (deferred)
+- **Critical design decision (locked in with the user): always draft, never
+  auto-create.** `POST /extract-receipt` never writes an `Expense`. It
+  returns a `ReceiptExtractionDraft` (amount?, merchant?, date?, confidence)
+  for the web/mobile form to pre-fill — the user must still tap "Add
+  expense" to submit via the unchanged `POST /expenses`.
+- **Critical design decision (locked in): Drive bytes are fetched on demand,
+  never persisted.** Given a `vaultItemId`, the API resolves the linked
+  Drive file, downloads its bytes straight into Document AI's request, and
+  discards them — no copy ever lands in Firestore or Cloud Storage.
+- **Known limitation (documented in `driveFiles.ts`)**: bytes are fetched
+  using the *current caller's* stored Drive refresh token. If a vault item
+  was added by a different family member than the one extracting a receipt
+  from it, and the file isn't shared with the caller's Drive account, the
+  Drive API returns a 403. Acceptable for this slice; revisit if it proves
+  common in practice (e.g. by switching to a Drive service-account share or
+  a family-shared Drive folder).
+- **Data model** (`packages/shared/src/ai.ts`): `ReceiptExtractionDraft`
+  (amount?, merchant?, date?, confidence). Stateless — never persisted.
+- **Backend** (`apps/api/src/lib/documentAi.ts`, `driveFiles.ts`,
+  `apps/api/src/routes/expenses.ts`): `documentAi.ts` wraps the Document AI
+  `processDocument` REST call (online/synchronous processor, not batch) and
+  parses its response into a `ReceiptExtractionDraft`. `driveFiles.ts`
+  fetches raw bytes for a given vault item's Drive file using the caller's
+  refresh token (the on-demand, never-persisted fetch above). New
+  `POST /v1/families/:familyId/expenses/extract-receipt` route accepts
+  `{ vaultItemId }`, chains both, returns the draft. Returns 503 if
+  Document AI isn't configured.
+- **Web UI**: `/finance` — "Extract from receipt" flow on the expense form:
+  pick an existing Vault item, call extract-receipt, pre-fill
+  amount/merchant/date fields (still editable) before the user submits.
+- **Mobile**: not built this pass — Vault item picking wasn't yet part of
+  the mobile app's minimal screen set. Voice input (2.B.3) shipped on mobile
+  instead, per the user's explicit choice below.
 
-- Speech-to-Text wiring for voice-logged expenses.
+#### 2.B.3 — Voice input (SHIPPED)
+
+Speech-to-Text transcription + Gemini structured extraction for
+voice-logged expenses, shipped on **web and mobile simultaneously** per the
+user's explicit choice (not phased mobile-after-web like other features).
+
+- **Critical design decision (locked in): always draft, never auto-create.**
+  Same principle as 2.B.2 — `POST /transcribe-voice` only returns a
+  `VoiceExpenseDraft` (amount?, merchant?, category?, date?, confidence) for
+  the form to pre-fill; submission is still the unchanged `POST /expenses`.
+- **Critical design decision (locked in): Gemini does structured extraction,
+  not Speech-to-Text alone.** Speech-to-Text produces a raw transcript
+  ("forty two dollars at trader joe's yesterday"); Gemini (`generateJson`,
+  same wrapper as 4.B/4.C) turns that into structured fields against
+  `VoiceExpenseDraftSchema`. If Vertex AI isn't configured, the route falls
+  back to returning the raw transcript only (`amount`/`merchant`/etc. all
+  unset) rather than 503ing outright — partial degradation, since the
+  transcript alone is still some value to the user.
+- **Data model** (`packages/shared/src/ai.ts`): `VoiceExpenseDraft`
+  (transcript, amount?, merchant?, category?, date?, confidence). Stateless
+  — never persisted.
+- **Backend** (`apps/api/src/lib/speechToText.ts`,
+  `apps/api/src/routes/expenses.ts`): `speechToText.ts` wraps the
+  Speech-to-Text `recognize` REST call (synchronous, short-audio mode — no
+  streaming/long-running-operation handling, since voice-logged expenses are
+  a few seconds of speech). New
+  `POST /v1/families/:familyId/expenses/transcribe-voice` route accepts
+  base64-encoded audio + encoding/sampleRate, transcribes, then runs the
+  transcript through Gemini structured extraction, returns the draft.
+- **Web UI**: `/finance` — mic button on the expense form using the
+  browser's `MediaRecorder` API, calls transcribe-voice on stop, pre-fills
+  the form from the draft.
+- **Mobile** (`apps/mobile`): new minimal voice-expense capture screen,
+  wired into `App.tsx`'s manual screen-switching (no router library in this
+  app). Uses `expo-av` for audio recording and `expo-file-system` for
+  base64 encoding before calling the same transcribe-voice endpoint. New
+  native permission: Android `RECORD_AUDIO` + iOS microphone usage
+  description, both added via the `expo-av` config plugin in `app.json`.
+
+### GCP setup for 2.B.2/2.B.3
+
+1. **Enable both APIs** (one-time per project):
+   ```
+   gcloud services enable documentai.googleapis.com speech.googleapis.com \
+     --project=<PROJECT_ID>
+   ```
+2. **Create a Document AI processor** (Expense Parser or Document OCR —
+   Expense Parser gives structured amount/merchant/date fields directly;
+   Document OCR is plain-text only and relies more on the Gemini-side
+   parsing already used for voice, so Expense Parser is the better fit
+   here):
+   ```
+   gcloud documentai processors create \
+     --location=us \
+     --processor-type=EXPENSE_PROCESSOR \
+     --display-name=niki-receipt-parser \
+     --project=<PROJECT_ID>
+   ```
+   (Console UI — Document AI → Create Processor — is simpler for this
+   one-time step.) Note the resulting processor ID from the output or
+   Console.
+3. **Grant the existing API service account both Document AI and
+   Speech-to-Text access** (reuse the same service account `apps/api`'s
+   Cloud Run service already runs as — see `SETUP.md`):
+   ```
+   gcloud projects add-iam-policy-binding <PROJECT_ID> \
+     --member="serviceAccount:<API_SERVICE_ACCOUNT_EMAIL>" \
+     --role="roles/documentai.apiUser"
+
+   gcloud projects add-iam-policy-binding <PROJECT_ID> \
+     --member="serviceAccount:<API_SERVICE_ACCOUNT_EMAIL>" \
+     --role="roles/speech.client"
+   ```
+4. **Set these env vars on the API's Cloud Run service**:
+   - `DOCUMENT_AI_PROCESSOR_ID` (the processor ID from step 2)
+   - `DOCUMENT_AI_LOCATION` (the region used in step 2, e.g. `us`)
+   - `GOOGLE_CLOUD_PROJECT` (or reuse existing `FIREBASE_PROJECT_ID` if
+     it's the same project — the code falls back to that, same pattern as
+     4.A's Vertex AI config)
+   - Speech-to-Text and the Gemini structured-extraction step reuse the
+     existing `VERTEX_AI_*` env vars from 4.A/4.B — no new vars needed for
+     those.
+5. **Mobile-only**: after pulling this change, run `npx expo prebuild` (or
+   rebuild the dev client) so the new `RECORD_AUDIO`/microphone permissions
+   in `app.json` take effect — a permission added to `app.json` doesn't
+   retroactively apply to an already-built native binary.
+
+Until steps 1-4 are done, `extract-receipt` returns 503 and `transcribe-voice`
+falls back to transcript-only (per the partial-degradation note above) —
+both fail soft by design, consistent with every other AI feature in this
+roadmap.
+
+### Environment note: sandbox npm-install corruption (not app code, but
+worth flagging for future sessions in this sandbox)
+
+While building 2.B.3's mobile screen, `npm install expo-av -w apps/mobile`
+triggered filesystem-level corruption unrelated to the package itself: npm's
+post-install cleanup hit `EPERM`/rename failures on this sandbox's
+Windows-FUSE-mounted filesystem, stranding several **unrelated** `@types/*`
+packages (`node-forge`, `stack-utils`, `yargs`, `yargs-parser`, and —
+critically, since `react-native` is hoisted at the repo root — root-level
+`@types/react`) as corrupted/empty directories with unreachable hidden temp
+dirs alongside them. The corrupted root `@types/react` silently broke
+`react-native`'s own internal type declarations (masked by
+`skipLibCheck: true`), cascading into `TS2607`/`TS2786` JSX errors across
+every mobile screen file — not a real code bug, just this sandbox's install
+cleanup being unreliable. Fixed by re-extracting clean package contents via
+`npm pack` + `tar` for load-bearing packages (`react`, `yargs-parser`) and by
+writing minimal `export {};` stubs for packages nothing actually imports
+(`node-forge`, `stack-utils`, `yargs`). If a future `npm install` in
+`apps/mobile` or at the repo root produces unexplained `TS2688`/JSX errors,
+suspect this same cleanup-failure pattern before assuming a real type error.
 
 - **Deferred (all of 2.B)**: bank integrations (Plaid) — explicitly
   PRD-excluded from MVP
@@ -542,8 +686,8 @@ rollup), not automated stale-access alerts.
 
 - **Phase 1**: confirm build order (proposed: 1.A → 1.B → 1.C → 1.D) and
   MVP-vs-full-depth per module
-- **Phase 2.B**: resolved — manual entry (2.B.1) shipped first; receipt OCR
-  (2.B.2) and voice input (2.B.3) deferred to separate follow-up milestones
+- **Phase 2.B**: resolved — manual entry (2.B.1), receipt OCR (2.B.2), and
+  voice input (2.B.3, web + mobile simultaneously) all shipped
 - **Phase 4.A**: resolved — Vertex AI Vector Search chosen over
   Postgres+pgvector and Firestore's native vector search; shipped indexing
   Knowledge entries + Tasks only (Events/Memories deferred to a later

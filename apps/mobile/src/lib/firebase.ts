@@ -1,4 +1,10 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
+// @ts-expect-error — getReactNativePersistence ships under @firebase/auth's
+// "react-native" package.json export condition. tsc's node10 module
+// resolution (required by Expo/Metro's bundler) doesn't evaluate export
+// conditions at all, so this named export is invisible to static types even
+// though it exists and works correctly at runtime via Metro's RN-aware
+// resolver. This is a known Firebase + Expo/TypeScript gap, not a bug here.
 import { initializeAuth, getAuth, getReactNativePersistence } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 

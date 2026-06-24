@@ -15,6 +15,9 @@ import type {
   VaultItem,
 } from '@niki/shared';
 import { BUDGET_PERIODS, EXPENSE_CATEGORIES } from '@niki/shared';
+import { AppShell } from '@/components/AppShell';
+import { Card, Badge, EmptyState, PageHeader } from '@/components/ui';
+import { FinanceIcon, CameraIcon, MicIcon } from '@/components/icons';
 
 type Tab = 'budgets' | 'expenses' | 'goals' | 'coaching';
 
@@ -85,13 +88,20 @@ export default function FinancePage() {
   }
 
   return (
-    <div className="container">
-      <h1>Finance — {family.name}</h1>
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+    <AppShell>
+      <PageHeader module="finance" icon={<FinanceIcon size={22} />} title="Finance" subtitle={family.name} />
+      {error && (
+        <Card style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>{error}</Card>
+      )}
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
         {(['budgets', 'expenses', 'goals', 'coaching'] as Tab[]).map((t) => (
-          <button key={t} onClick={() => setTab(t)} style={{ fontWeight: tab === t ? 'bold' : 'normal' }}>
+          <button
+            key={t}
+            className={tab === t ? 'btn-primary' : 'btn-secondary'}
+            onClick={() => setTab(t)}
+            style={{ padding: '6px 14px' }}
+          >
             {t === 'budgets'
               ? 'Budgets'
               : t === 'expenses'
@@ -103,23 +113,17 @@ export default function FinancePage() {
         ))}
       </div>
 
-      <div style={{ marginTop: 16 }}>
-        {tab === 'budgets' && (
-          <BudgetsTab familyId={family.id} budgets={budgets} expenses={expenses} onChange={refresh} setError={setError} />
-        )}
-        {tab === 'expenses' && (
-          <ExpensesTab familyId={family.id} expenses={expenses} budgets={budgets} onChange={refresh} setError={setError} />
-        )}
-        {tab === 'goals' && (
-          <SavingsGoalsTab familyId={family.id} goals={goals} onChange={refresh} setError={setError} />
-        )}
-        {tab === 'coaching' && <CoachingTab familyId={family.id} />}
-      </div>
-
-      <p style={{ marginTop: 32 }}>
-        <a href="/">Back home</a>
-      </p>
-    </div>
+      {tab === 'budgets' && (
+        <BudgetsTab familyId={family.id} budgets={budgets} expenses={expenses} onChange={refresh} setError={setError} />
+      )}
+      {tab === 'expenses' && (
+        <ExpensesTab familyId={family.id} expenses={expenses} budgets={budgets} onChange={refresh} setError={setError} />
+      )}
+      {tab === 'goals' && (
+        <SavingsGoalsTab familyId={family.id} goals={goals} onChange={refresh} setError={setError} />
+      )}
+      {tab === 'coaching' && <CoachingTab familyId={family.id} />}
+    </AppShell>
   );
 }
 
@@ -207,7 +211,9 @@ function BudgetsTab({
 
   return (
     <div>
-      {budgets.length === 0 && <p>No budgets yet.</p>}
+      {budgets.length === 0 && (
+        <EmptyState module="finance" icon={<FinanceIcon size={32} />} title="No budgets yet" description="Create one below to start tracking spend by category." />
+      )}
       {budgets.map((b) => {
         const spentByCategory = new Map<string, number>();
         for (const ex of expenses) {
@@ -216,69 +222,79 @@ function BudgetsTab({
         }
         const categories = Object.keys(b.categoryAllocations) as ExpenseCategory[];
         return (
-          <div key={b.id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginBottom: 8 }}>
-            <strong>{b.name}</strong> ({b.period}
-            {b.startDate ? ` · ${b.startDate}${b.endDate ? ` – ${b.endDate}` : ''}` : ''})
+          <Card key={b.id}>
+            <strong>{b.name}</strong> <Badge module="finance">{b.period}</Badge>
+            {b.startDate && (
+              <span style={{ fontSize: 13, color: 'var(--color-text-tertiary)' }}>
+                {' '}
+                {b.startDate}{b.endDate ? ` – ${b.endDate}` : ''}
+              </span>
+            )}
             <ul style={{ margin: '8px 0', paddingLeft: 16 }}>
               {categories.map((cat) => {
                 const allocated = b.categoryAllocations[cat] ?? 0;
                 const spent = spentByCategory.get(cat) ?? 0;
                 const over = spent > allocated;
                 return (
-                  <li key={cat} style={{ fontSize: '0.9em', color: over ? 'crimson' : undefined }}>
+                  <li key={cat} style={{ fontSize: 13, color: over ? 'var(--color-danger)' : undefined }}>
                     {cat}: {money(spent)} / {money(allocated)}
                   </li>
                 );
               })}
-              {categories.length === 0 && <li style={{ fontSize: '0.9em', color: '#888' }}>No category allocations set.</li>}
+              {categories.length === 0 && <li style={{ fontSize: 13, color: 'var(--color-text-tertiary)' }}>No category allocations set.</li>}
             </ul>
-            <button onClick={() => handleDelete(b.id)} style={{ color: 'crimson' }}>
+            <button className="btn-danger" onClick={() => handleDelete(b.id)}>
               Delete
             </button>
-          </div>
+          </Card>
         );
       })}
 
-      {!formOpen && <button onClick={() => setFormOpen(true)}>+ New budget</button>}
+      {!formOpen && (
+        <button className="btn-primary" onClick={() => setFormOpen(true)}>
+          + New budget
+        </button>
+      )}
       {formOpen && (
-        <div style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, maxWidth: 420 }}>
+        <Card style={{ maxWidth: 420 }}>
           <h3 style={{ marginTop: 0 }}>New budget</h3>
-          <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} style={{ width: '100%' }} />
-          <br />
-          <select value={period} onChange={(e) => setPeriod(e.target.value as BudgetPeriod)} style={{ marginTop: 8 }}>
+          <label>Name</label>
+          <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
+          <label>Period</label>
+          <select value={period} onChange={(e) => setPeriod(e.target.value as BudgetPeriod)}>
             {BUDGET_PERIODS.map((p) => (
               <option key={p} value={p}>
                 {p}
               </option>
             ))}
           </select>
-          <br />
           {(period === 'custom' || period === 'event') && (
-            <>
-              <label style={{ marginTop: 8, display: 'inline-block' }}>
-                Start <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <label style={{ flex: 1 }}>
+                Start
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
               </label>
-              <label style={{ marginLeft: 8 }}>
-                End <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              <label style={{ flex: 1 }}>
+                End
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
               </label>
-              <br />
-            </>
+            </div>
           )}
           {period === 'event' && (
             <input
               placeholder="Event ID"
               value={eventId}
               onChange={(e) => setEventId(e.target.value)}
-              style={{ marginTop: 8, width: '100%' }}
             />
           )}
 
-          <h4 style={{ marginTop: 12, marginBottom: 4 }}>Category allocations</h4>
+          <h4 style={{ marginTop: 4, marginBottom: 8 }}>Category allocations</h4>
           {allocRows.map((row, i) => (
             <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
               <select
                 value={row.category}
                 onChange={(e) => updateRow(i, { category: e.target.value as ExpenseCategory })}
+                style={{ marginBottom: 0 }}
               >
                 {EXPENSE_CATEGORIES.map((c) => (
                   <option key={c} value={c}>
@@ -291,20 +307,23 @@ function BudgetsTab({
                 placeholder="Amount"
                 value={row.amount}
                 onChange={(e) => updateRow(i, { amount: e.target.value })}
-                style={{ width: 100 }}
+                style={{ width: 100, marginBottom: 0 }}
               />
-              <button onClick={() => removeRow(i)}>×</button>
+              <button className="btn-secondary" onClick={() => removeRow(i)}>×</button>
             </div>
           ))}
-          <button onClick={addRow}>+ Add category</button>
-          <br />
-          <button className="btn-primary" disabled={busy || !name} onClick={handleCreate} style={{ marginTop: 12 }}>
-            Save
+          <button className="btn-secondary" onClick={addRow} style={{ marginTop: 4 }}>
+            + Add category
           </button>
-          <button disabled={busy} onClick={() => setFormOpen(false)} style={{ marginTop: 12, marginLeft: 8 }}>
-            Cancel
-          </button>
-        </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <button className="btn-primary" disabled={busy || !name} onClick={handleCreate}>
+              Save
+            </button>
+            <button className="btn-secondary" disabled={busy} onClick={() => setFormOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        </Card>
       )}
     </div>
   );
@@ -488,25 +507,27 @@ function ExpensesTab({
 
   return (
     <div>
-      <div style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, maxWidth: 420, marginBottom: 16 }}>
+      <Card style={{ maxWidth: 420 }}>
         <h3 style={{ marginTop: 0 }}>Log an expense</h3>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-          <button type="button" onClick={openReceiptPicker} disabled={extracting}>
-            {extracting ? 'Scanning…' : '📷 Scan a receipt'}
+          <button type="button" className="btn-secondary" onClick={openReceiptPicker} disabled={extracting} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <CameraIcon size={15} />
+            {extracting ? 'Scanning…' : 'Scan a receipt'}
           </button>
-          <button type="button" onClick={recording ? stopRecording : startRecording} disabled={transcribing}>
-            {transcribing ? 'Transcribing…' : recording ? '⏹ Stop recording' : '🎤 Speak an expense'}
+          <button type="button" className="btn-secondary" onClick={recording ? stopRecording : startRecording} disabled={transcribing} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <MicIcon size={15} />
+            {transcribing ? 'Transcribing…' : recording ? 'Stop recording' : 'Speak an expense'}
           </button>
         </div>
 
         {showReceiptPicker && (
-          <div style={{ border: '1px solid #eee', borderRadius: 6, padding: 8, marginBottom: 10 }}>
-            <p style={{ margin: '0 0 6px', fontSize: '0.85em', color: '#666' }}>
+          <Card style={{ background: 'var(--color-bg)', marginBottom: 10 }}>
+            <p style={{ margin: '0 0 6px', fontSize: 13 }}>
               Pick a receipt already added to Vault — its photo is scanned on demand, never stored separately.
             </p>
-            {vaultItems.length === 0 && <p style={{ fontSize: '0.85em', color: '#888' }}>No Vault items found.</p>}
-            <select value={selectedVaultItemId} onChange={(e) => setSelectedVaultItemId(e.target.value)}>
+            {vaultItems.length === 0 && <p style={{ fontSize: 13, color: 'var(--color-text-tertiary)' }}>No Vault items found.</p>}
+            <select value={selectedVaultItemId} onChange={(e) => setSelectedVaultItemId(e.target.value)} style={{ marginBottom: 8 }}>
               <option value="">Choose a Vault item…</option>
               {vaultItems.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -514,53 +535,54 @@ function ExpensesTab({
                 </option>
               ))}
             </select>
-            <button onClick={handleExtract} disabled={!selectedVaultItemId || extracting} style={{ marginLeft: 6 }}>
-              Extract
-            </button>
-            <button onClick={() => setShowReceiptPicker(false)} style={{ marginLeft: 6 }}>
-              Cancel
-            </button>
-          </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn-primary" onClick={handleExtract} disabled={!selectedVaultItemId || extracting}>
+                Extract
+              </button>
+              <button className="btn-secondary" onClick={() => setShowReceiptPicker(false)}>
+                Cancel
+              </button>
+            </div>
+          </Card>
         )}
 
         {transcript && (
-          <p style={{ fontSize: '0.85em', color: '#666', fontStyle: 'italic', marginBottom: 10 }}>
-            Heard: "{transcript}"
+          <p style={{ fontSize: 13, color: 'var(--color-text-tertiary)', fontStyle: 'italic', marginBottom: 10 }}>
+            Heard: &quot;{transcript}&quot;
           </p>
         )}
 
         {source !== 'manual' && (
-          <p style={{ fontSize: '0.8em', color: '#1a3d7c', marginBottom: 6 }}>
-            Pre-filled from {source === 'receipt' ? 'receipt scan' : 'voice'} — review before saving.
+          <p style={{ fontSize: 13, marginBottom: 6 }}>
+            <Badge module="finance">Pre-filled from {source === 'receipt' ? 'receipt scan' : 'voice'} — review before saving</Badge>
           </p>
         )}
 
+        <label>Amount</label>
         <input
           type="number"
           placeholder="Amount"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          style={{ width: '100%' }}
         />
-        <br />
+        <label>Merchant</label>
         <input
           placeholder="Merchant"
           value={merchant}
           onChange={(e) => setMerchant(e.target.value)}
-          style={{ marginTop: 8, width: '100%' }}
         />
-        <br />
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ marginTop: 8 }} />
-        <select value={category} onChange={(e) => setCategory(e.target.value as ExpenseCategory)} style={{ marginTop: 8, marginLeft: 8 }}>
-          {EXPENSE_CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        <br />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <select value={category} onChange={(e) => setCategory(e.target.value as ExpenseCategory)}>
+            {EXPENSE_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
         {budgets.length > 0 && (
-          <select value={budgetId} onChange={(e) => setBudgetId(e.target.value)} style={{ marginTop: 8 }}>
+          <select value={budgetId} onChange={(e) => setBudgetId(e.target.value)}>
             <option value="">No budget</option>
             {budgets.map((b) => (
               <option key={b.id} value={b.id}>
@@ -569,44 +591,32 @@ function ExpensesTab({
             ))}
           </select>
         )}
-        <br />
         <button
           className="btn-primary"
           disabled={busy || !amount || !merchant || !date}
           onClick={handleCreate}
-          style={{ marginTop: 8 }}
         >
           Add expense
         </button>
-      </div>
+      </Card>
 
-      <ul style={{ listStyle: 'none', padding: 0 }}>
-        {sorted.map((ex) => (
-          <li
-            key={ex.id}
-            style={{
-              border: '1px solid #eee',
-              borderRadius: 6,
-              padding: 8,
-              marginBottom: 4,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
+      {sorted.length === 0 ? (
+        <EmptyState module="finance" icon={<FinanceIcon size={32} />} title="No expenses logged yet" description="Log one above, scan a receipt, or speak it in." />
+      ) : (
+        sorted.map((ex) => (
+          <Card key={ex.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>
-              {ex.date} — {ex.merchant} ({ex.category})
+              {ex.date} — {ex.merchant} <Badge module="finance">{ex.category}</Badge>
             </span>
-            <span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {money(ex.amount)}
-              <button onClick={() => handleDelete(ex.id)} style={{ marginLeft: 8, color: 'crimson' }}>
+              <button className="btn-danger" onClick={() => handleDelete(ex.id)}>
                 Delete
               </button>
             </span>
-          </li>
-        ))}
-        {sorted.length === 0 && <p>No expenses logged yet.</p>}
-      </ul>
+          </Card>
+        ))
+      )}
     </div>
   );
 }
@@ -680,60 +690,63 @@ function SavingsGoalsTab({
 
   return (
     <div>
+      {goals.length === 0 && (
+        <EmptyState module="finance" icon={<FinanceIcon size={32} />} title="No savings goals yet" description="Set one below to start tracking progress." />
+      )}
       {goals.map((g) => {
         const pct = Math.min(100, Math.round((g.currentAmount / g.targetAmount) * 100));
         return (
-          <div key={g.id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginBottom: 8, maxWidth: 420 }}>
+          <Card key={g.id} style={{ maxWidth: 420 }}>
             <strong>{g.name}</strong>
-            {g.targetDate && <span style={{ color: '#888', fontSize: '0.85em' }}> — by {g.targetDate}</span>}
-            <div style={{ background: '#eee', borderRadius: 4, height: 8, marginTop: 8 }}>
-              <div style={{ background: '#1a3d7c', borderRadius: 4, height: 8, width: `${pct}%` }} />
+            {g.targetDate && <span style={{ color: 'var(--color-text-tertiary)', fontSize: 13 }}> — by {g.targetDate}</span>}
+            <div style={{ background: 'var(--color-bg)', borderRadius: 4, height: 8, marginTop: 8 }}>
+              <div style={{ background: 'var(--color-finance-600)', borderRadius: 4, height: 8, width: `${pct}%` }} />
             </div>
-            <p style={{ fontSize: '0.9em', margin: '4px 0' }}>
+            <p style={{ fontSize: 13, margin: '4px 0' }}>
               {money(g.currentAmount)} / {money(g.targetAmount)} ({pct}%)
             </p>
-            <input
-              type="number"
-              placeholder="Contribute amount"
-              value={contributions[g.id] ?? ''}
-              onChange={(e) => setContributions((c) => ({ ...c, [g.id]: e.target.value }))}
-              style={{ width: 140 }}
-            />
-            <button onClick={() => handleContribute(g)} style={{ marginLeft: 4 }}>
-              Add
-            </button>
-            <button onClick={() => handleDelete(g.id)} style={{ marginLeft: 8, color: 'crimson' }}>
-              Delete
-            </button>
-          </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="number"
+                placeholder="Contribute amount"
+                value={contributions[g.id] ?? ''}
+                onChange={(e) => setContributions((c) => ({ ...c, [g.id]: e.target.value }))}
+                style={{ width: 140, marginBottom: 0 }}
+              />
+              <button className="btn-secondary" onClick={() => handleContribute(g)}>
+                Add
+              </button>
+              <button className="btn-danger" onClick={() => handleDelete(g.id)}>
+                Delete
+              </button>
+            </div>
+          </Card>
         );
       })}
-      {goals.length === 0 && <p>No savings goals yet.</p>}
 
-      <div style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, maxWidth: 420 }}>
+      <Card style={{ maxWidth: 420 }}>
         <h3 style={{ marginTop: 0 }}>New savings goal</h3>
-        <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} style={{ width: '100%' }} />
-        <br />
+        <label>Name</label>
+        <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
+        <label>Target amount</label>
         <input
           type="number"
           placeholder="Target amount"
           value={targetAmount}
           onChange={(e) => setTargetAmount(e.target.value)}
-          style={{ marginTop: 8 }}
         />
-        <label style={{ marginLeft: 8 }}>
-          Target date (optional) <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
+        <label>
+          Target date (optional)
+          <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
         </label>
-        <br />
         <button
           className="btn-primary"
           disabled={busy || !name || !targetAmount}
           onClick={handleCreate}
-          style={{ marginTop: 8 }}
         >
           Save
         </button>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -767,50 +780,49 @@ function CoachingTab({ familyId }: { familyId: string }) {
 
   return (
     <div>
-      <p style={{ color: '#666', fontSize: '0.9em', maxWidth: 480 }}>
+      <p style={{ fontSize: 13, maxWidth: 480 }}>
         Overspending alerts and savings pacing, computed from your actual budgets and goals. Numbers are calculated
         directly — AI is only used to phrase the summary below.
       </p>
-      <button onClick={handleLoad} disabled={loading}>
+      <button className="btn-primary" onClick={handleLoad} disabled={loading}>
         {loading ? 'Checking…' : report ? 'Refresh insights' : 'Get coaching insights'}
       </button>
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+      {error && (
+        <Card style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)', marginTop: 16 }}>{error}</Card>
+      )}
 
       {report && (
         <div style={{ marginTop: 16, maxWidth: 560 }}>
           <p style={{ fontStyle: 'italic' }}>{report.summary}</p>
 
           <h4>Overspending alerts</h4>
-          {report.alerts.length === 0 && <p style={{ color: '#888' }}>No budgets are currently over allocation.</p>}
+          {report.alerts.length === 0 && <p style={{ color: 'var(--color-text-tertiary)' }}>No budgets are currently over allocation.</p>}
           {report.alerts.map((a, i) => (
-            <div
-              key={`${a.budgetId}-${a.category}-${i}`}
-              style={{ border: '1px solid #f3c4c4', background: '#fff5f5', borderRadius: 8, padding: 10, marginBottom: 6 }}
-            >
-              <strong style={{ color: 'crimson' }}>
+            <Card key={`${a.budgetId}-${a.category}-${i}`} style={{ background: 'var(--color-danger-bg)' }}>
+              <strong style={{ color: 'var(--color-danger)' }}>
                 {a.budgetName} — {a.category}
               </strong>
-              <p style={{ margin: '4px 0', fontSize: '0.9em' }}>{a.message}</p>
-              <span style={{ fontSize: '0.85em', color: '#888' }}>
+              <p style={{ margin: '4px 0', fontSize: 13 }}>{a.message}</p>
+              <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
                 {money(a.spent)} spent / {money(a.allocated)} allocated
               </span>
-            </div>
+            </Card>
           ))}
 
           <h4 style={{ marginTop: 16 }}>Savings recommendations</h4>
           {report.recommendations.length === 0 && (
-            <p style={{ color: '#888' }}>No savings goals need a contribution plan right now.</p>
+            <p style={{ color: 'var(--color-text-tertiary)' }}>No savings goals need a contribution plan right now.</p>
           )}
           {report.recommendations.map((r) => (
-            <div key={r.goalId} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 10, marginBottom: 6 }}>
+            <Card key={r.goalId}>
               <strong>{r.goalName}</strong>
-              <p style={{ margin: '4px 0', fontSize: '0.9em' }}>{r.message}</p>
+              <p style={{ margin: '4px 0', fontSize: 13 }}>{r.message}</p>
               {r.suggestedMonthlyContribution !== undefined && (
-                <span style={{ fontSize: '0.85em', color: '#888' }}>
+                <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
                   Suggested: {money(r.suggestedMonthlyContribution)}/month
                 </span>
               )}
-            </div>
+            </Card>
           ))}
         </div>
       )}

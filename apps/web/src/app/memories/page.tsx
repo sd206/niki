@@ -5,6 +5,9 @@ import { useAuth } from '@/lib/useAuth';
 import { api } from '@/lib/api';
 import type { Family, Memory, MemoryType, DriveConnection } from '@niki/shared';
 import { MEMORY_TYPES } from '@niki/shared';
+import { AppShell } from '@/components/AppShell';
+import { Card, Badge, EmptyState, PageHeader } from '@/components/ui';
+import { MemoriesIcon } from '@/components/icons';
 
 /**
  * Minimal ambient typing for the Google API loader + Picker, same as
@@ -115,36 +118,51 @@ export default function MemoriesPage() {
   const driveConnected = drive?.status === 'connected';
 
   return (
-    <div className="container">
-      <h1>Memories — {family.name}</h1>
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+    <AppShell>
+      <PageHeader module="memories" icon={<MemoriesIcon size={22} />} title="Memories" subtitle={family.name} />
+      {error && (
+        <Card style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>{error}</Card>
+      )}
 
       <div style={{ marginTop: 16 }}>
-        {memories.length === 0 && <p>No memories yet.</p>}
-        {memories.map((m) => (
-          <div key={m.id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginBottom: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <strong>{m.title}</strong>
-              <span style={{ color: '#888', fontSize: '0.85em' }}>
-                {m.date} · {m.type}
-              </span>
-            </div>
-            {m.description && <p style={{ margin: '4px 0' }}>{m.description}</p>}
-            {m.driveFileUrl && (
-              <a href={m.driveFileUrl} target="_blank" rel="noreferrer">
-                View attached file
-              </a>
-            )}
-            <div style={{ marginTop: 4 }}>
-              <button onClick={() => handleDelete(m.id)} style={{ color: 'crimson' }}>
-                Delete
-              </button>
-            </div>
-          </div>
-        ))}
+        {memories.length === 0 ? (
+          <EmptyState
+            module="memories"
+            icon={<MemoriesIcon size={32} />}
+            title="No memories yet"
+            description="Capture a story, milestone, or moment to keep for the family."
+          />
+        ) : (
+          memories.map((m) => (
+            <Card key={m.id}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <strong>{m.title}</strong>
+                <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <span style={{ color: 'var(--color-text-tertiary)', fontSize: '0.85em' }}>{m.date}</span>
+                  <Badge module="memories">{m.type}</Badge>
+                </span>
+              </div>
+              {m.description && <p style={{ margin: '4px 0' }}>{m.description}</p>}
+              {m.driveFileUrl && (
+                <a href={m.driveFileUrl} target="_blank" rel="noreferrer">
+                  View attached file
+                </a>
+              )}
+              <div style={{ marginTop: 8 }}>
+                <button className="btn-danger" onClick={() => handleDelete(m.id)}>
+                  Delete
+                </button>
+              </div>
+            </Card>
+          ))
+        )}
       </div>
 
-      {!formOpen && <button onClick={() => setFormOpen(true)}>+ New memory</button>}
+      {!formOpen && (
+        <button className="btn-primary" onClick={() => setFormOpen(true)}>
+          + New memory
+        </button>
+      )}
       {formOpen && (
         <MemoryForm
           familyId={family.id}
@@ -157,11 +175,7 @@ export default function MemoriesPage() {
           setError={setError}
         />
       )}
-
-      <p style={{ marginTop: 32 }}>
-        <a href="/">Back home</a>
-      </p>
-    </div>
+    </AppShell>
   );
 }
 
@@ -246,41 +260,48 @@ function MemoryForm({
   }
 
   return (
-    <div style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, maxWidth: 480, marginBottom: 8 }}>
+    <Card style={{ maxWidth: 480 }}>
       <h3 style={{ marginTop: 0 }}>New memory</h3>
-      <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: '100%' }} />
-      <br />
-      <select value={type} onChange={(e) => setType(e.target.value as MemoryType)} style={{ marginTop: 8 }}>
-        {MEMORY_TYPES.map((t) => (
-          <option key={t} value={t}>
-            {t}
-          </option>
-        ))}
-      </select>
-      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ marginTop: 8, marginLeft: 8 }} />
-      <br />
+      <label>Title</label>
+      <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ flex: 1 }}>
+          <label>Type</label>
+          <select value={type} onChange={(e) => setType(e.target.value as MemoryType)}>
+            {MEMORY_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div style={{ flex: 1 }}>
+          <label>Date</label>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+      </div>
+      <label>Description</label>
       <textarea
         placeholder="Description (optional)"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         rows={4}
-        style={{ marginTop: 8, width: '100%' }}
       />
-      <br />
       {driveFileName ? (
         <p style={{ margin: '8px 0', fontSize: '0.9em' }}>Attached: {driveFileName}</p>
       ) : (
-        <button disabled={busy || !driveConnected} onClick={handleAttachFromDrive} style={{ marginTop: 8 }}>
+        <button className="btn-secondary" disabled={busy || !driveConnected} onClick={handleAttachFromDrive} style={{ marginTop: 8 }}>
           {driveConnected ? 'Attach a file from Drive (optional)' : 'Connect Drive in Settings to attach a file'}
         </button>
       )}
-      <br />
-      <button className="btn-primary" disabled={busy || !title.trim() || !date} onClick={handleSave} style={{ marginTop: 12 }}>
-        Save
-      </button>
-      <button disabled={busy} onClick={onCancel} style={{ marginTop: 12, marginLeft: 8 }}>
-        Cancel
-      </button>
-    </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button className="btn-primary" disabled={busy || !title.trim() || !date} onClick={handleSave}>
+          Save
+        </button>
+        <button className="btn-secondary" disabled={busy} onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </Card>
   );
 }

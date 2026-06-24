@@ -5,6 +5,9 @@ import { useAuth } from '@/lib/useAuth';
 import { api } from '@/lib/api';
 import type { Family, CalendarEntry, CalendarEntryType } from '@niki/shared';
 import { CALENDAR_ENTRY_TYPES } from '@niki/shared';
+import { AppShell } from '@/components/AppShell';
+import { Card, PageHeader } from '@/components/ui';
+import { CalendarIcon, PlusIcon } from '@/components/icons';
 
 type View = 'month' | 'week' | 'day' | 'agenda';
 
@@ -214,38 +217,43 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="container">
-      <h1>Calendar — {family.name}</h1>
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+    <AppShell>
+      <PageHeader module="calendar" icon={<CalendarIcon size={22} />} title="Calendar" subtitle={family.name} />
+      {error && (
+        <Card style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>{error}</Card>
+      )}
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 16, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
         {(['month', 'week', 'day', 'agenda'] as View[]).map((v) => (
           <button
             key={v}
+            className={view === v ? 'btn-primary' : 'btn-secondary'}
             onClick={() => setView(v)}
-            style={{
-              fontWeight: view === v ? 'bold' : 'normal',
-              textTransform: 'capitalize',
-            }}
+            style={{ textTransform: 'capitalize', padding: '6px 14px' }}
           >
             {v}
           </button>
         ))}
-        <span style={{ marginLeft: 16 }}>
-          <button onClick={() => navigate(-1)}>← Prev</button>
-          <button onClick={() => setAnchor(new Date())} style={{ marginLeft: 4 }}>
+        <span style={{ marginLeft: 16, display: 'flex', gap: 4 }}>
+          <button className="btn-secondary" onClick={() => navigate(-1)}>← Prev</button>
+          <button className="btn-secondary" onClick={() => setAnchor(new Date())}>
             Today
           </button>
-          <button onClick={() => navigate(1)} style={{ marginLeft: 4 }}>
+          <button className="btn-secondary" onClick={() => navigate(1)}>
             Next →
           </button>
         </span>
-        <button style={{ marginLeft: 16 }} onClick={() => openNewForm(toISO(anchor))}>
-          + New entry
+        <button
+          className="btn-primary"
+          style={{ marginLeft: 16, display: 'flex', alignItems: 'center', gap: 6 }}
+          onClick={() => openNewForm(toISO(anchor))}
+        >
+          <PlusIcon size={15} />
+          New entry
         </button>
       </div>
 
-      <div style={{ marginTop: 16 }}>
+      <Card>
         {view === 'month' && (
           <MonthView
             anchor={anchor}
@@ -271,35 +279,23 @@ export default function CalendarPage() {
           />
         )}
         {view === 'agenda' && <AgendaView entries={entries} onEntryClick={openEditForm} />}
-      </div>
+      </Card>
 
       {formOpen && (
-        <div
-          style={{
-            marginTop: 24,
-            border: '1px solid #ddd',
-            borderRadius: 8,
-            padding: 16,
-            maxWidth: 360,
-          }}
-        >
+        <Card style={{ marginTop: 16, maxWidth: 360 }}>
           <h3 style={{ marginTop: 0 }}>{editingId ? 'Edit entry' : 'New entry'}</h3>
           <input
             placeholder="Title"
             value={formTitle}
             onChange={(e) => setFormTitle(e.target.value)}
-            style={{ width: '100%' }}
           />
-          <br />
-          <label style={{ marginTop: 8, display: 'inline-block' }}>
-            Date{' '}
+          <label>
+            Date
             <input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} />
           </label>
-          <br />
           <select
             value={formType}
             onChange={(e) => setFormType(e.target.value as CalendarEntryType)}
-            style={{ marginTop: 8 }}
           >
             {CALENDAR_ENTRY_TYPES.filter((t) => t !== 'task' && t !== 'event').map((t) => (
               <option key={t} value={t}>
@@ -307,34 +303,26 @@ export default function CalendarPage() {
               </option>
             ))}
           </select>
-          <br />
-          <button
-            className="btn-primary"
-            disabled={busy || !formTitle || !formDate}
-            onClick={handleSave}
-            style={{ marginTop: 12 }}
-          >
-            Save
-          </button>
-          {editingId && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
             <button
-              disabled={busy}
-              onClick={handleDelete}
-              style={{ marginTop: 12, marginLeft: 8, color: 'crimson' }}
+              className="btn-primary"
+              disabled={busy || !formTitle || !formDate}
+              onClick={handleSave}
             >
-              Delete
+              Save
             </button>
-          )}
-          <button disabled={busy} onClick={() => setFormOpen(false)} style={{ marginTop: 12, marginLeft: 8 }}>
-            Cancel
-          </button>
-        </div>
+            {editingId && (
+              <button className="btn-danger" disabled={busy} onClick={handleDelete}>
+                Delete
+              </button>
+            )}
+            <button className="btn-secondary" disabled={busy} onClick={() => setFormOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        </Card>
       )}
-
-      <p style={{ marginTop: 32 }}>
-        <a href="/">Back home</a>
-      </p>
-    </div>
+    </AppShell>
   );
 }
 
@@ -349,8 +337,8 @@ function EntryChip({ entry, onClick }: { entry: CalendarEntry; onClick: (e: Cale
         padding: '2px 4px',
         marginTop: 2,
         borderRadius: 4,
-        background: synthetic ? '#eee' : '#dbe9ff',
-        color: synthetic ? '#666' : '#1a3d7c',
+        background: synthetic ? 'var(--color-bg)' : 'var(--color-calendar-50)',
+        color: synthetic ? 'var(--color-text-tertiary)' : 'var(--color-calendar-800)',
         cursor: synthetic ? 'default' : 'pointer',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
@@ -398,11 +386,11 @@ function MonthView({
               onClick={() => onDayClick(iso)}
               style={{
                 minHeight: 72,
-                border: '1px solid #eee',
+                border: '1px solid var(--color-border)',
                 padding: 4,
                 cursor: 'pointer',
-                background: inMonth ? 'white' : '#fafafa',
-                color: inMonth ? 'black' : '#bbb',
+                background: inMonth ? 'var(--color-surface)' : 'var(--color-bg)',
+                color: inMonth ? 'var(--color-text)' : 'var(--color-text-tertiary)',
               }}
             >
               <div style={{ fontSize: '0.8em' }}>{d.getDate()}</div>
@@ -412,7 +400,7 @@ function MonthView({
                 </div>
               ))}
               {dayEntries.length > 3 && (
-                <div style={{ fontSize: '0.7em', color: '#888' }}>+{dayEntries.length - 3} more</div>
+                <div style={{ fontSize: '0.7em', color: 'var(--color-text-tertiary)' }}>+{dayEntries.length - 3} more</div>
               )}
             </div>
           );
@@ -445,7 +433,7 @@ function WeekView({
           <div
             key={iso}
             onClick={() => onDayClick(iso)}
-            style={{ border: '1px solid #eee', borderRadius: 6, padding: 8, minHeight: 160, cursor: 'pointer' }}
+            style={{ border: '1px solid var(--color-border)', borderRadius: 6, padding: 8, minHeight: 160, cursor: 'pointer' }}
           >
             <div style={{ fontWeight: 'bold', fontSize: '0.85em' }}>
               {WEEKDAY_LABELS[(d.getDay() + 6) % 7]} {d.getDate()}
@@ -484,9 +472,9 @@ function DayView({
       </h3>
       <div
         onClick={() => onDayClick(iso)}
-        style={{ border: '1px solid #eee', borderRadius: 6, padding: 12, minHeight: 120, cursor: 'pointer' }}
+        style={{ border: '1px solid var(--color-border)', borderRadius: 6, padding: 12, minHeight: 120, cursor: 'pointer' }}
       >
-        {dayEntries.length === 0 && <p style={{ color: '#888' }}>Nothing scheduled. Click to add an entry.</p>}
+        {dayEntries.length === 0 && <p style={{ color: 'var(--color-text-tertiary)' }}>Nothing scheduled. Click to add an entry.</p>}
         {dayEntries.map((e) => (
           <div key={e.id} onClick={(ev) => ev.stopPropagation()} style={{ marginBottom: 4 }}>
             <EntryChip entry={e} onClick={onEntryClick} />
@@ -516,7 +504,7 @@ function AgendaView({
 
   return (
     <div>
-      {grouped.length === 0 && <p style={{ color: '#888' }}>Nothing in the next 30 days.</p>}
+      {grouped.length === 0 && <p style={{ color: 'var(--color-text-tertiary)' }}>Nothing in the next 30 days.</p>}
       {grouped.map(([date, dayEntries]) => {
         const d = fromISO(date);
         return (
@@ -528,7 +516,7 @@ function AgendaView({
               <div
                 key={e.id}
                 style={{
-                  border: '1px solid #eee',
+                  border: '1px solid var(--color-border)',
                   borderRadius: 6,
                   padding: 8,
                   marginBottom: 4,
@@ -539,7 +527,7 @@ function AgendaView({
                 onClick={() => onEntryClick(e)}
               >
                 <span>{e.title}</span>
-                <span style={{ fontSize: '0.8em', color: '#888' }}>{e.type}</span>
+                <span style={{ fontSize: '0.8em', color: 'var(--color-text-tertiary)' }}>{e.type}</span>
               </div>
             ))}
           </div>

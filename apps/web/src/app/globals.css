@@ -1,18 +1,120 @@
+/* ===== Niki design tokens =====
+ * Warm-neutral base + indigo brand color + one accent color per module.
+ * See PHASES.md "Design system" note for the rationale.
+ */
+:root {
+  /* Brand */
+  --color-brand-50: #eeedfe;
+  --color-brand-100: #cecbf6;
+  --color-brand-400: #7f77dd;
+  --color-brand-600: #534ab7;
+  --color-brand-900: #26215c;
+
+  /* Neutrals (warm gray) */
+  --color-bg: #f1efe8;
+  --color-surface: #ffffff;
+  --color-border: #e3e0d5;
+  --color-border-strong: #d3d1c7;
+  --color-text: #2c2c2a;
+  --color-text-secondary: #5f5e5a;
+  --color-text-tertiary: #888780;
+
+  /* Semantic */
+  --color-danger: #a32d2d;
+  --color-danger-bg: #fcebeb;
+  --color-success: #3b6d11;
+  --color-success-bg: #eaf3de;
+
+  /* Module accents: 50 = soft bg, 600 = solid/icon, 800 = text-on-soft-bg */
+  --color-tasks-50: #faeeda;
+  --color-tasks-600: #ba7517;
+  --color-tasks-800: #412402;
+
+  --color-events-50: #faece7;
+  --color-events-600: #d85a30;
+  --color-events-800: #4a1b0c;
+
+  --color-calendar-50: #e6f1fb;
+  --color-calendar-600: #185fa5;
+  --color-calendar-800: #042c53;
+
+  --color-vault-50: #e1f5ee;
+  --color-vault-600: #0f6e56;
+  --color-vault-800: #04342c;
+
+  --color-finance-50: #eaf3de;
+  --color-finance-600: #3b6d11;
+  --color-finance-800: #173404;
+
+  --color-knowledge-50: #eeedfe;
+  --color-knowledge-600: #534ab7;
+  --color-knowledge-800: #26215c;
+
+  --color-memories-50: #fbeaf0;
+  --color-memories-600: #993556;
+  --color-memories-800: #4b1528;
+
+  --color-search-50: #e9e7e0;
+  --color-search-600: #5f5e5a;
+  --color-search-800: #2c2c2a;
+
+  --color-settings-50: #eeedfe;
+  --color-settings-600: #534ab7;
+  --color-settings-800: #26215c;
+
+  /* Layout */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+  --shadow-card: 0 1px 3px rgba(40, 35, 20, 0.06), 0 1px 2px rgba(40, 35, 20, 0.04);
+  --shadow-raised: 0 4px 16px rgba(40, 35, 20, 0.08);
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
 * {
   box-sizing: border-box;
 }
 
+html,
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #f7f7f5;
-  color: #1a1a1a;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0 0 4px;
+}
+
+p {
+  line-height: 1.55;
+  color: var(--color-text-secondary);
+}
+
+a {
+  color: var(--color-brand-600);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
 }
 
 .container {
-  max-width: 480px;
+  max-width: 760px;
   margin: 0 auto;
-  padding: 48px 24px;
+  padding: 32px 24px 80px;
 }
 
 button {
@@ -20,20 +122,192 @@ button {
   font-family: inherit;
 }
 
-.btn-primary {
-  background: #1a1a1a;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  padding: 12px 20px;
-  font-size: 15px;
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
-input {
+/* ----- Buttons ----- */
+.btn-primary,
+.btn-secondary,
+.btn-danger {
+  border-radius: var(--radius-sm);
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  transition: filter 0.15s ease, transform 0.05s ease;
+}
+
+.btn-primary {
+  background: var(--color-brand-600);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.btn-secondary {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--color-bg);
+}
+
+.btn-danger {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.btn-danger:hover:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* ----- Inputs ----- */
+input,
+select,
+textarea {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  font-size: 15px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-family: inherit;
   margin-bottom: 12px;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--color-brand-400);
+  box-shadow: 0 0 0 3px var(--color-brand-50);
+}
+
+label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* ----- Cards ----- */
+.card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 16px 20px;
+  margin-bottom: 12px;
+}
+
+/* ----- Badges / pills ----- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+}
+
+/* Per-module color utility classes — bg = soft accent, fg = readable text-on-accent */
+.mod-tasks { background: var(--color-tasks-50); color: var(--color-tasks-800); }
+.mod-events { background: var(--color-events-50); color: var(--color-events-800); }
+.mod-calendar { background: var(--color-calendar-50); color: var(--color-calendar-800); }
+.mod-vault { background: var(--color-vault-50); color: var(--color-vault-800); }
+.mod-finance { background: var(--color-finance-50); color: var(--color-finance-800); }
+.mod-knowledge { background: var(--color-knowledge-50); color: var(--color-knowledge-800); }
+.mod-memories { background: var(--color-memories-50); color: var(--color-memories-800); }
+.mod-search { background: var(--color-search-50); color: var(--color-search-800); }
+.mod-settings { background: var(--color-settings-50); color: var(--color-settings-800); }
+
+.icon-tile {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ----- Top nav ----- */
+.topnav {
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.topnav-inner {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 56px;
+  overflow-x: auto;
+}
+
+.topnav-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.topnav-link:hover {
+  background: var(--color-bg);
+  text-decoration: none;
+}
+
+.topnav-link.active {
+  background: var(--color-brand-50);
+  color: var(--color-brand-600);
+}
+
+.topnav-brand {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--color-text);
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+/* ----- Empty state ----- */
+.empty-state {
+  text-align: center;
+  padding: 40px 24px;
+}
+
+.empty-state svg {
+  margin-bottom: 16px;
+}
+
+.empty-state h3 {
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.empty-state p {
+  font-size: 13px;
+  max-width: 320px;
+  margin: 0 auto;
 }

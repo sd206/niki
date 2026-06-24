@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/useAuth';
 import { api } from '@/lib/api';
 import type { Family, Member, Task, TaskStatus, TaskPriority } from '@niki/shared';
+import { AppShell } from '@/components/AppShell';
+import { Card, Badge, EmptyState, PageHeader } from '@/components/ui';
+import { TasksIcon, PlusIcon } from '@/components/icons';
 
 /**
  * Single static route (no [id] segment) for the same reason /family is —
@@ -125,18 +128,20 @@ export default function TasksPage() {
   const memberName = (uid?: string) => members.find((m) => m.uid === uid)?.displayName ?? '—';
 
   return (
-    <div className="container">
-      <h1>Tasks — {family.name}</h1>
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+    <AppShell>
+      <PageHeader module="tasks" icon={<TasksIcon size={22} />} title="Tasks" subtitle={family.name} />
+      {error && (
+        <Card style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>{error}</Card>
+      )}
 
-      <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as TaskStatus | 'all')}>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as TaskStatus | 'all')} style={{ marginBottom: 0 }}>
           <option value="all">All statuses</option>
           <option value="todo">To do</option>
           <option value="in_progress">In progress</option>
           <option value="done">Done</option>
         </select>
-        <select value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)}>
+        <select value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)} style={{ marginBottom: 0 }}>
           <option value="all">Everyone</option>
           {members.map((m) => (
             <option key={m.uid} value={m.uid}>
@@ -146,65 +151,72 @@ export default function TasksPage() {
         </select>
       </div>
 
-      <ul style={{ marginTop: 16, listStyle: 'none', padding: 0 }}>
-        {tasks.map((t) => (
-          <li key={t.id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginBottom: 8 }}>
-            <strong>{t.title}</strong> ({t.priority})
-            {t.description && <p style={{ margin: '4px 0' }}>{t.description}</p>}
-            <p style={{ margin: '4px 0', fontSize: '0.9em', color: '#666' }}>
-              Assigned to: {memberName(t.assignedTo)}
-              {t.dueDate && ` · Due ${t.dueDate}`}
-            </p>
-            <select value={t.status} onChange={(e) => handleStatusChange(t, e.target.value as TaskStatus)}>
-              <option value="todo">To do</option>
-              <option value="in_progress">In progress</option>
-              <option value="done">Done</option>
-            </select>
-            <button onClick={() => handleDelete(t)} style={{ marginLeft: 8 }}>
-              Delete
-            </button>
-          </li>
-        ))}
-        {tasks.length === 0 && <p>No tasks match this filter.</p>}
-      </ul>
+      {tasks.length === 0 ? (
+        <EmptyState
+          module="tasks"
+          icon={<TasksIcon size={32} />}
+          title="No tasks match this filter"
+          description="Add a task below, or clear the filters above."
+        />
+      ) : (
+        tasks.map((t) => (
+          <Card key={t.id}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <strong>{t.title}</strong>{' '}
+                <Badge module="tasks">{t.priority}</Badge>
+                {t.description && <p style={{ margin: '4px 0' }}>{t.description}</p>}
+                <p style={{ margin: '4px 0', fontSize: 13 }}>
+                  Assigned to: {memberName(t.assignedTo)}
+                  {t.dueDate && ` · Due ${t.dueDate}`}
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <select value={t.status} onChange={(e) => handleStatusChange(t, e.target.value as TaskStatus)} style={{ marginBottom: 0, width: 'auto' }}>
+                <option value="todo">To do</option>
+                <option value="in_progress">In progress</option>
+                <option value="done">Done</option>
+              </select>
+              <button className="btn-danger" onClick={() => handleDelete(t)}>
+                Delete
+              </button>
+            </div>
+          </Card>
+        ))
+      )}
 
-      <h3 style={{ marginTop: 32 }}>New task</h3>
-      <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-      <br />
-      <textarea
-        placeholder="Description (optional)"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        style={{ marginTop: 8, width: '100%', maxWidth: 400 }}
-      />
-      <br />
-      <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} style={{ marginTop: 8 }}>
-        <option value="">Unassigned</option>
-        {members.map((m) => (
-          <option key={m.uid} value={m.uid}>
-            {m.displayName}
-          </option>
-        ))}
-      </select>
-      <input
-        type="date"
-        value={dueDate}
-        onChange={(e) => setDueDate(e.target.value)}
-        style={{ marginLeft: 8 }}
-      />
-      <select value={priority} onChange={(e) => setPriority(e.target.value as TaskPriority)} style={{ marginLeft: 8 }}>
-        <option value="low">Low</option>
-        <option value="medium">Medium</option>
-        <option value="high">High</option>
-      </select>
-      <br />
-      <button className="btn-primary" disabled={busy || !title} onClick={handleCreate} style={{ marginTop: 8 }}>
-        Add task
-      </button>
-
-      <p style={{ marginTop: 32 }}>
-        <a href="/">Back home</a>
-      </p>
-    </div>
+      <h3 style={{ marginTop: 32, marginBottom: 12 }}>New task</h3>
+      <Card>
+        <label>Title</label>
+        <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label>Description</label>
+        <textarea
+          placeholder="Description (optional)"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>
+            <option value="">Unassigned</option>
+            {members.map((m) => (
+              <option key={m.uid} value={m.uid}>
+                {m.displayName}
+              </option>
+            ))}
+          </select>
+          <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          <select value={priority} onChange={(e) => setPriority(e.target.value as TaskPriority)}>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+        <button className="btn-primary" disabled={busy || !title} onClick={handleCreate} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <PlusIcon size={15} />
+          Add task
+        </button>
+      </Card>
+    </AppShell>
   );
 }

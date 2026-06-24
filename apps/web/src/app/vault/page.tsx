@@ -14,6 +14,9 @@ import type {
   DriveConnection,
 } from '@niki/shared';
 import { VAULT_CATEGORIES, VAULT_FOLDER_TYPES, HARDENED_VAULT_FOLDER_TYPES, hasAtLeastRole } from '@niki/shared';
+import { AppShell } from '@/components/AppShell';
+import { Card, Badge, EmptyState, PageHeader } from '@/components/ui';
+import { VaultIcon } from '@/components/icons';
 
 /**
  * Minimal ambient typing for the Google API loader + Picker — there's no
@@ -238,42 +241,38 @@ export default function VaultPage() {
   const driveConnected = drive?.status === 'connected';
 
   return (
-    <div className="container">
-      <h1>Vault — {family.name}</h1>
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+    <AppShell>
+      <PageHeader module="vault" icon={<VaultIcon size={22} />} title="Vault" subtitle={family.name} />
+      {error && (
+        <Card style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>{error}</Card>
+      )}
 
       {suggestion && (
-        <div
-          style={{
-            border: '1px solid #f0c36d',
-            background: '#fff8e6',
-            borderRadius: 8,
-            padding: 12,
-            marginTop: 16,
-          }}
-        >
-          <p style={{ margin: '0 0 8px' }}>
+        <Card style={{ background: 'var(--color-tasks-50)' }}>
+          <p style={{ margin: '0 0 8px', color: 'var(--color-text)' }}>
             <strong>{suggestion.vaultItemName}</strong> looks sensitive. {suggestion.reason} Move it to the{' '}
             <strong>{suggestion.suggestedFolderType}</strong> folder?
           </p>
-          <button onClick={handleAcceptSuggestion} disabled={movingItem} style={{ marginRight: 8 }}>
-            {movingItem ? 'Moving…' : `Move to ${suggestion.suggestedFolderType}`}
-          </button>
-          <button onClick={handleDismissSuggestion} disabled={movingItem}>
-            Dismiss
-          </button>
-        </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn-primary" onClick={handleAcceptSuggestion} disabled={movingItem}>
+              {movingItem ? 'Moving…' : `Move to ${suggestion.suggestedFolderType}`}
+            </button>
+            <button className="btn-secondary" onClick={handleDismissSuggestion} disabled={movingItem}>
+              Dismiss
+            </button>
+          </div>
+        </Card>
       )}
 
       {!driveConnected && (
-        <p>
+        <Card style={{ background: 'var(--color-bg)' }}>
           Connect Google Drive in <a href="/settings">Settings</a> before adding vault items.
-        </p>
+        </Card>
       )}
 
-      <div style={{ marginTop: 16, display: 'flex', gap: 16 }}>
-        <label>
-          Filter by category{' '}
+      <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+        <label style={{ flex: 1 }}>
+          Filter by category
           <select value={filter} onChange={(e) => handleFilterChange(e.target.value as VaultCategory | '')}>
             <option value="">All</option>
             {VAULT_CATEGORIES.map((c) => (
@@ -283,8 +282,8 @@ export default function VaultPage() {
             ))}
           </select>
         </label>
-        <label>
-          Filter by folder{' '}
+        <label style={{ flex: 1 }}>
+          Filter by folder
           <select value={folderFilter} onChange={(e) => handleFolderFilterChange(e.target.value as VaultFolderType | '')}>
             <option value="">All</option>
             {VAULT_FOLDER_TYPES.map((f) => (
@@ -296,34 +295,37 @@ export default function VaultPage() {
         </label>
       </div>
 
-      <ul style={{ marginTop: 16, listStyle: 'none', padding: 0 }}>
-        {items.map((item) => {
+      {items.length === 0 ? (
+        <EmptyState module="vault" icon={<VaultIcon size={32} />} title="No vault items yet" description="Add a document from Drive below to get started." />
+      ) : (
+        items.map((item) => {
           const hardened = (HARDENED_VAULT_FOLDER_TYPES as readonly string[]).includes(item.folderType);
           return (
-            <li key={item.id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginBottom: 8 }}>
+            <Card key={item.id}>
               <a href={item.driveFileUrl} target="_blank" rel="noreferrer">
                 <strong>{item.name}</strong>
               </a>
-              <p style={{ margin: '4px 0', fontSize: '0.9em', color: '#666' }}>
-                {item.category}
+              <p style={{ margin: '4px 0', fontSize: 13 }}>
+                <Badge module="vault">{item.category}</Badge>
                 {hardened && (
-                  <span style={{ marginLeft: 8, color: '#a15c00', fontWeight: 600 }}>🔒 {item.folderType}</span>
+                  <span style={{ marginLeft: 8 }}>
+                    <Badge module="vault">🔒 {item.folderType}</Badge>
+                  </span>
                 )}
               </p>
               {(!hardened || canManageHardened) && (
-                <button onClick={() => handleDelete(item)} style={{ color: 'crimson' }}>
+                <button className="btn-danger" onClick={() => handleDelete(item)}>
                   Remove
                 </button>
               )}
-            </li>
+            </Card>
           );
-        })}
-        {items.length === 0 && <p>No vault items yet.</p>}
-      </ul>
+        })
+      )}
 
-      <h3 style={{ marginTop: 32 }}>Add from Drive</h3>
-      <label>
-        Category{' '}
+      <h3 style={{ marginTop: 32, marginBottom: 12 }}>Add from Drive</h3>
+      <Card>
+        <label>Category</label>
         <select value={pickerCategory} onChange={(e) => setPickerCategory(e.target.value as VaultCategory)}>
           {VAULT_CATEGORIES.map((c) => (
             <option key={c} value={c}>
@@ -331,9 +333,7 @@ export default function VaultPage() {
             </option>
           ))}
         </select>
-      </label>{' '}
-      <label>
-        Folder{' '}
+        <label>Folder</label>
         <select value={pickerFolderType} onChange={(e) => setPickerFolderType(e.target.value as VaultFolderType)}>
           {VAULT_FOLDER_TYPES.filter(
             (f) => f === 'standard' || canManageHardened,
@@ -343,40 +343,34 @@ export default function VaultPage() {
             </option>
           ))}
         </select>
-      </label>
-      {!canManageHardened && (
-        <p style={{ fontSize: '0.85em', color: '#888', margin: '4px 0' }}>
-          Restricted/secure/vault folders require the parent role or higher.
-        </p>
-      )}
-      <br />
-      <button
-        className="btn-primary"
-        disabled={busy || !driveConnected}
-        onClick={handleAddFromDrive}
-        style={{ marginTop: 8 }}
-      >
-        {busy ? 'Opening Drive…' : 'Add from Drive'}
-      </button>
+        {!canManageHardened && (
+          <p style={{ fontSize: 13, margin: '0 0 12px' }}>
+            Restricted/secure/vault folders require the parent role or higher.
+          </p>
+        )}
+        <button className="btn-primary" disabled={busy || !driveConnected} onClick={handleAddFromDrive}>
+          {busy ? 'Opening Drive…' : 'Add from Drive'}
+        </button>
+      </Card>
 
       {canManageHardened && (
-        <div style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginTop: 32, maxWidth: 640 }}>
+        <Card style={{ marginTop: 24 }}>
           <h3 style={{ marginTop: 0 }}>Permission review</h3>
-          <p style={{ color: '#666', fontSize: '0.9em', margin: '4px 0 8px' }}>
+          <p style={{ fontSize: 13, margin: '4px 0 8px' }}>
             These members can view, add to, and delete from restricted/secure/vault folders.
           </p>
           <ul style={{ margin: '8px 0', paddingLeft: 20 }}>
             {members
               .filter((m) => hasAtLeastRole(m.role, 'parent'))
               .map((m) => (
-                <li key={m.uid} style={{ fontSize: '0.9em' }}>
+                <li key={m.uid} style={{ fontSize: 13 }}>
                   {m.displayName} ({m.role}){m.uid === user.uid ? ' — you' : ''}
                 </li>
               ))}
           </ul>
           {auditLog && (
             <>
-              <p style={{ color: '#666', fontSize: '0.9em', margin: '8px 0 4px' }}>
+              <p style={{ fontSize: 13, margin: '8px 0 4px' }}>
                 Recent hardened-vault activity, by member (from the {auditLog.length} entries loaded below):
               </p>
               <ul style={{ margin: '4px 0', paddingLeft: 20 }}>
@@ -388,37 +382,37 @@ export default function VaultPage() {
                 ).map(([uid, count]) => {
                   const m = members.find((mm) => mm.uid === uid);
                   return (
-                    <li key={uid} style={{ fontSize: '0.9em' }}>
+                    <li key={uid} style={{ fontSize: 13 }}>
                       {m ? m.displayName : uid}
                       {uid === user.uid ? ' (you)' : ''}: {count} action{count === 1 ? '' : 's'}
                     </li>
                   );
                 })}
-                {auditLog.length === 0 && <li style={{ fontSize: '0.9em' }}>No activity yet.</li>}
+                {auditLog.length === 0 && <li style={{ fontSize: 13 }}>No activity yet.</li>}
               </ul>
             </>
           )}
           {!auditLog && (
-            <p style={{ color: '#888', fontSize: '0.85em', margin: '8px 0 0' }}>
+            <p style={{ color: 'var(--color-text-tertiary)', fontSize: 13, margin: '8px 0 0' }}>
               Load the audit log below to see a recent-activity rollup here.
             </p>
           )}
-        </div>
+        </Card>
       )}
 
       {canManageHardened && (
-        <div style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginTop: 16, maxWidth: 640 }}>
+        <Card style={{ marginTop: 16 }}>
           <h3 style={{ marginTop: 0 }}>Audit log</h3>
-          <p style={{ color: '#666', fontSize: '0.9em', margin: '4px 0 8px' }}>
+          <p style={{ fontSize: 13, margin: '4px 0 8px' }}>
             Every view/create/delete against restricted, secure, or vault items — most recent first.
           </p>
-          <button onClick={handleViewAuditLog} disabled={auditLoading}>
+          <button className="btn-secondary" onClick={handleViewAuditLog} disabled={auditLoading}>
             {auditLoading ? 'Loading…' : 'View audit log'}
           </button>
           {auditLog && (
-            <table style={{ marginTop: 12, width: '100%', fontSize: '0.85em', borderCollapse: 'collapse' }}>
+            <table style={{ marginTop: 12, width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>
+                <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--color-border-strong)' }}>
                   <th>When</th>
                   <th>Action</th>
                   <th>Item</th>
@@ -428,7 +422,7 @@ export default function VaultPage() {
               </thead>
               <tbody>
                 {auditLog.map((entry) => (
-                  <tr key={entry.id} style={{ borderBottom: '1px solid #eee' }}>
+                  <tr key={entry.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                     <td>{new Date(entry.timestamp).toLocaleString()}</td>
                     <td>{entry.action}</td>
                     <td>{entry.vaultItemName}</td>
@@ -444,12 +438,8 @@ export default function VaultPage() {
               </tbody>
             </table>
           )}
-        </div>
+        </Card>
       )}
-
-      <p style={{ marginTop: 32 }}>
-        <a href="/">Back home</a>
-      </p>
-    </div>
+    </AppShell>
   );
 }

@@ -5,6 +5,9 @@ import { useAuth } from '@/lib/useAuth';
 import { api } from '@/lib/api';
 import type { Family, Member, Invite, CreateInviteInput } from '@niki/shared';
 import { hasAtLeastRole } from '@niki/shared';
+import { AppShell } from '@/components/AppShell';
+import { Card, Badge, PageHeader } from '@/components/ui';
+import { UsersIcon } from '@/components/icons';
 
 type InvitableRole = CreateInviteInput['role'];
 
@@ -79,54 +82,67 @@ export default function FamilyPage() {
   const canInvite = me ? hasAtLeastRole(me.role, 'parent') : false;
 
   return (
-    <div className="container">
-      <h1>{family.name}</h1>
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+    <AppShell>
+      <PageHeader module="search" icon={<UsersIcon size={22} />} title={family.name} subtitle="Members & invites" />
+      {error && (
+        <Card style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>{error}</Card>
+      )}
 
-      <h3>Members</h3>
-      <ul>
-        {members.map((m) => (
-          <li key={m.uid}>
-            {m.displayName} — {m.role} ({m.status})
-          </li>
+      <h3 style={{ marginBottom: 8 }}>Members</h3>
+      <Card>
+        {members.map((m, i) => (
+          <div
+            key={m.uid}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '8px 0',
+              borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
+            }}
+          >
+            <span>{m.displayName}</span>
+            <span style={{ display: 'flex', gap: 6 }}>
+              <Badge module="search">{m.role}</Badge>
+              <Badge module="search">{m.status}</Badge>
+            </span>
+          </div>
         ))}
-      </ul>
+      </Card>
 
       {canInvite && (
         <>
-          <h3 style={{ marginTop: 32 }}>Invite a member</h3>
-          <input
-            placeholder="Email"
-            value={inviteEmail}
-            onChange={(e) => setInviteEmail(e.target.value)}
-          />
-          <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as InvitableRole)}>
-            <option value="parent">Parent</option>
-            <option value="member">Member</option>
-            <option value="child">Child</option>
-            <option value="guest">Guest</option>
-          </select>
-          <button className="btn-primary" disabled={busy || !inviteEmail} onClick={handleInvite}>
-            Send invite
-          </button>
+          <h3 style={{ marginTop: 32, marginBottom: 8 }}>Invite a member</h3>
+          <Card>
+            <input
+              placeholder="Email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+            />
+            <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as InvitableRole)}>
+              <option value="parent">Parent</option>
+              <option value="member">Member</option>
+              <option value="child">Child</option>
+              <option value="guest">Guest</option>
+            </select>
+            <button className="btn-primary" disabled={busy || !inviteEmail} onClick={handleInvite}>
+              Send invite
+            </button>
 
-          {lastInvite && (
-            <p style={{ marginTop: 16 }}>
-              Invite created for {lastInvite.email}. Sending the email itself is a later
-              phase (Notifications module) — for now, share this code with them directly:
-              <br />
-              <code style={{ fontSize: '1.2em' }}>{lastInvite.code}</code>
-              <br />
-              They enter it on the <a href="/onboarding">onboarding page</a> under
-              &quot;join with an invite code.&quot;
-            </p>
-          )}
+            {lastInvite && (
+              <p style={{ marginTop: 16, marginBottom: 0 }}>
+                Invite created for {lastInvite.email}. Sending the email itself is a later
+                phase (Notifications module) — for now, share this code with them directly:
+                <br />
+                <code style={{ fontSize: '1.2em' }}>{lastInvite.code}</code>
+                <br />
+                They enter it on the <a href="/onboarding">onboarding page</a> under
+                &quot;join with an invite code.&quot;
+              </p>
+            )}
+          </Card>
         </>
       )}
-
-      <p style={{ marginTop: 32 }}>
-        <a href="/">Back home</a>
-      </p>
-    </div>
+    </AppShell>
   );
 }

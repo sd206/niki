@@ -5,6 +5,9 @@ import { useEffect } from 'react';
 import { useAuth } from '@/lib/useAuth';
 import { api } from '@/lib/api';
 import type { Family, SearchResult } from '@niki/shared';
+import { AppShell } from '@/components/AppShell';
+import { Card, Badge, EmptyState, PageHeader } from '@/components/ui';
+import { SearchIcon } from '@/components/icons';
 
 /**
  * Single static route (apps/web uses `output: 'export'`), same reason as
@@ -70,50 +73,52 @@ export default function SearchPage() {
   }
 
   return (
-    <div className="container">
-      <h1>Search — {family.name}</h1>
-      <p style={{ color: '#666', fontSize: '0.9em' }}>
-        Searches Knowledge Hub entries and Tasks by meaning, not just keywords.
-      </p>
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+    <AppShell>
+      <PageHeader
+        module="search"
+        icon={<SearchIcon size={22} />}
+        title="Search"
+        subtitle="Searches Knowledge Hub entries and Tasks by meaning, not just keywords."
+      />
+      {error && (
+        <Card style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>{error}</Card>
+      )}
 
-      <form onSubmit={handleSearch} style={{ marginTop: 16, display: 'flex', gap: 8 }}>
+      <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <input
           placeholder="What are you looking for?"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          style={{ flex: 1, maxWidth: 400 }}
+          style={{ flex: 1, maxWidth: 400, marginBottom: 0 }}
         />
-        <button type="submit" disabled={searching || !q.trim()}>
+        <button type="submit" className="btn-primary" disabled={searching || !q.trim()}>
           {searching ? 'Searching…' : 'Search'}
         </button>
       </form>
 
-      <div style={{ marginTop: 24 }}>
-        {results === null && <p style={{ color: '#888' }}>Results will appear here.</p>}
-        {results !== null && results.length === 0 && (
-          <p>
-            No results. If this is your first search, the AI search index may not be configured yet for this
-            environment — see PHASES.md's Phase 4 setup notes.
-          </p>
-        )}
-        {results?.map((r) => (
-          <div key={`${r.type}:${r.id}`} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginBottom: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <strong>{r.title}</strong>
-              <span style={{ color: '#888', fontSize: '0.85em' }}>{r.type}</span>
-            </div>
-            {r.snippet && <p style={{ margin: '4px 0', color: '#555' }}>{r.snippet}</p>}
-            <a href={r.type === 'knowledge' ? '/knowledge' : '/tasks'} style={{ fontSize: '0.85em' }}>
-              Open in {r.type === 'knowledge' ? 'Knowledge' : 'Tasks'}
-            </a>
+      {results === null && (
+        <EmptyState module="search" icon={<SearchIcon size={32} />} title="Results will appear here" description="Search across Knowledge Hub entries and Tasks." />
+      )}
+      {results !== null && results.length === 0 && (
+        <EmptyState
+          module="search"
+          icon={<SearchIcon size={32} />}
+          title="No results"
+          description="If this is your first search, the AI search index may not be configured yet for this environment — see PHASES.md's Phase 4 setup notes."
+        />
+      )}
+      {results?.map((r) => (
+        <Card key={`${r.type}:${r.id}`}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <strong>{r.title}</strong>
+            <Badge module="search">{r.type}</Badge>
           </div>
-        ))}
-      </div>
-
-      <p style={{ marginTop: 32 }}>
-        <a href="/">Back home</a>
-      </p>
-    </div>
+          {r.snippet && <p style={{ margin: '4px 0', color: 'var(--color-text-secondary)' }}>{r.snippet}</p>}
+          <a href={r.type === 'knowledge' ? '/knowledge' : '/tasks'} style={{ fontSize: '0.85em' }}>
+            Open in {r.type === 'knowledge' ? 'Knowledge' : 'Tasks'}
+          </a>
+        </Card>
+      ))}
+    </AppShell>
   );
 }

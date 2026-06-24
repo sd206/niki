@@ -5,6 +5,9 @@ import { useAuth } from '@/lib/useAuth';
 import { api } from '@/lib/api';
 import type { Family, KnowledgeEntry, KnowledgeContentType, KnowledgeDigestResponse } from '@niki/shared';
 import { KNOWLEDGE_CONTENT_TYPES } from '@niki/shared';
+import { AppShell } from '@/components/AppShell';
+import { Card, Badge, EmptyState, PageHeader } from '@/components/ui';
+import { KnowledgeIcon } from '@/components/icons';
 
 /**
  * Single static route (apps/web uses `output: 'export'`), same reason as
@@ -119,21 +122,24 @@ export default function KnowledgePage() {
   }
 
   return (
-    <div className="container">
-      <h1>Knowledge — {family.name}</h1>
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+    <AppShell>
+      <PageHeader module="knowledge" icon={<KnowledgeIcon size={22} />} title="Knowledge" subtitle={family.name} />
+      {error && (
+        <Card style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>{error}</Card>
+      )}
 
-      <form onSubmit={handleSearch} style={{ marginTop: 16, display: 'flex', gap: 8 }}>
+      <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <input
           placeholder="Search title or tags…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          style={{ flex: 1, maxWidth: 320 }}
+          style={{ flex: 1, maxWidth: 320, marginBottom: 0 }}
         />
-        <button type="submit">Search</button>
+        <button type="submit" className="btn-secondary">Search</button>
         {q && (
           <button
             type="button"
+            className="btn-secondary"
             onClick={() => {
               setQ('');
               loadEntries(family.id);
@@ -144,37 +150,38 @@ export default function KnowledgePage() {
         )}
       </form>
 
-      <div style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginTop: 16, maxWidth: 560 }}>
+      <Card style={{ maxWidth: 560 }}>
         <h3 style={{ marginTop: 0 }}>Knowledge digest</h3>
-        <p style={{ color: '#666', fontSize: '0.9em', margin: '4px 0 8px' }}>
+        <p style={{ fontSize: 13, margin: '4px 0 8px' }}>
           AI-generated overview of your knowledge base — leave both filters blank for the whole hub.
         </p>
-        <select value={digestContentType} onChange={(e) => setDigestContentType(e.target.value as KnowledgeContentType | '')}>
-          <option value="">All types</option>
-          {KNOWLEDGE_CONTENT_TYPES.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        <input
-          placeholder="Tag (optional)"
-          value={digestTag}
-          onChange={(e) => setDigestTag(e.target.value)}
-          style={{ marginLeft: 8 }}
-        />
-        <button onClick={handleDigest} disabled={digestLoading} style={{ marginLeft: 8 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <select value={digestContentType} onChange={(e) => setDigestContentType(e.target.value as KnowledgeContentType | '')}>
+            <option value="">All types</option>
+            {KNOWLEDGE_CONTENT_TYPES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <input
+            placeholder="Tag (optional)"
+            value={digestTag}
+            onChange={(e) => setDigestTag(e.target.value)}
+          />
+        </div>
+        <button className="btn-primary" onClick={handleDigest} disabled={digestLoading}>
           {digestLoading ? 'Generating…' : 'Generate digest'}
         </button>
 
         {digest && (
           <div style={{ marginTop: 12 }}>
             <p style={{ fontStyle: 'italic' }}>{digest.summary}</p>
-            <p style={{ fontSize: '0.85em', color: '#888' }}>Based on {digest.entryCount} matching entr{digest.entryCount === 1 ? 'y' : 'ies'}.</p>
+            <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>Based on {digest.entryCount} matching entr{digest.entryCount === 1 ? 'y' : 'ies'}.</p>
             {digest.highlights.length > 0 && (
               <ul style={{ paddingLeft: 16 }}>
                 {digest.highlights.map((h, i) => (
-                  <li key={i} style={{ fontSize: '0.9em' }}>
+                  <li key={i} style={{ fontSize: 13 }}>
                     {h}
                   </li>
                 ))}
@@ -182,11 +189,12 @@ export default function KnowledgePage() {
             )}
           </div>
         )}
-      </div>
+      </Card>
 
-      <div style={{ marginTop: 16 }}>
-        {entries.length === 0 && <p>No knowledge entries yet.</p>}
-        {entries.map((entry) =>
+      {entries.length === 0 ? (
+        <EmptyState module="knowledge" icon={<KnowledgeIcon size={32} />} title="No knowledge entries yet" description="Add a recipe, plan, or reference note below." />
+      ) : (
+        entries.map((entry) =>
           editingId === entry.id ? (
             <EntryForm
               key={entry.id}
@@ -200,33 +208,21 @@ export default function KnowledgePage() {
               setError={setError}
             />
           ) : (
-            <div key={entry.id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginBottom: 8 }}>
+            <Card key={entry.id}>
               <div
                 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', cursor: 'pointer' }}
                 onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
               >
                 <div>
                   <strong>{entry.title}</strong>{' '}
-                  <span style={{ color: '#888', fontSize: '0.85em' }}>({entry.contentType})</span>
+                  <Badge module="knowledge">{entry.contentType}</Badge>
                 </div>
-                <span style={{ color: '#888', fontSize: '0.85em' }}>{expandedId === entry.id ? '▲' : '▼'}</span>
+                <span style={{ color: 'var(--color-text-tertiary)', fontSize: 13 }}>{expandedId === entry.id ? '▲' : '▼'}</span>
               </div>
               {entry.tags.length > 0 && (
-                <div style={{ marginTop: 4 }}>
+                <div style={{ marginTop: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                   {entry.tags.map((t) => (
-                    <span
-                      key={t}
-                      style={{
-                        display: 'inline-block',
-                        background: '#eee',
-                        borderRadius: 4,
-                        padding: '2px 6px',
-                        fontSize: '0.8em',
-                        marginRight: 4,
-                      }}
-                    >
-                      {t}
-                    </span>
+                    <Badge key={t} module="search">{t}</Badge>
                   ))}
                 </div>
               )}
@@ -234,36 +230,42 @@ export default function KnowledgePage() {
                 <>
                   <p style={{ whiteSpace: 'pre-wrap', marginTop: 8 }}>{entry.body}</p>
                   {summaries[entry.id] && (
-                    <p style={{ fontStyle: 'italic', color: '#555', background: '#f7f7f7', borderRadius: 6, padding: 8 }}>
+                    <p style={{ fontStyle: 'italic', background: 'var(--color-bg)', borderRadius: 6, padding: 8 }}>
                       {summaries[entry.id]}
                     </p>
                   )}
-                  <button onClick={() => setEditingId(entry.id)}>Edit</button>
-                  <button onClick={() => handleSummarize(entry)} disabled={summarizingId === entry.id} style={{ marginLeft: 8 }}>
-                    {summarizingId === entry.id ? 'Summarizing…' : 'Summarize'}
-                  </button>
-                  <button
-                    onClick={async () => {
-                      setError(null);
-                      try {
-                        await api.knowledge.remove(family.id, entry.id);
-                        refresh();
-                      } catch (err) {
-                        setError(err instanceof Error ? err.message : 'Failed to delete entry');
-                      }
-                    }}
-                    style={{ marginLeft: 8, color: 'crimson' }}
-                  >
-                    Delete
-                  </button>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button className="btn-secondary" onClick={() => setEditingId(entry.id)}>Edit</button>
+                    <button className="btn-secondary" onClick={() => handleSummarize(entry)} disabled={summarizingId === entry.id}>
+                      {summarizingId === entry.id ? 'Summarizing…' : 'Summarize'}
+                    </button>
+                    <button
+                      className="btn-danger"
+                      onClick={async () => {
+                        setError(null);
+                        try {
+                          await api.knowledge.remove(family.id, entry.id);
+                          refresh();
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : 'Failed to delete entry');
+                        }
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </>
               )}
-            </div>
+            </Card>
           ),
-        )}
-      </div>
+        )
+      )}
 
-      {!formOpen && <button onClick={() => setFormOpen(true)}>+ New entry</button>}
+      {!formOpen && (
+        <button className="btn-primary" onClick={() => setFormOpen(true)}>
+          + New entry
+        </button>
+      )}
       {formOpen && (
         <EntryForm
           familyId={family.id}
@@ -275,11 +277,7 @@ export default function KnowledgePage() {
           setError={setError}
         />
       )}
-
-      <p style={{ marginTop: 32 }}>
-        <a href="/">Back home</a>
-      </p>
-    </div>
+    </AppShell>
   );
 }
 
@@ -325,14 +323,14 @@ function EntryForm({
   }
 
   return (
-    <div style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, maxWidth: 480, marginBottom: 8 }}>
+    <Card style={{ maxWidth: 480 }}>
       <h3 style={{ marginTop: 0 }}>{entry ? 'Edit entry' : 'New entry'}</h3>
-      <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: '100%' }} />
-      <br />
+      <label>Title</label>
+      <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <label>Type</label>
       <select
         value={contentType}
         onChange={(e) => setContentType(e.target.value as KnowledgeContentType)}
-        style={{ marginTop: 8 }}
       >
         {KNOWLEDGE_CONTENT_TYPES.map((c) => (
           <option key={c} value={c}>
@@ -340,28 +338,27 @@ function EntryForm({
           </option>
         ))}
       </select>
-      <br />
+      <label>Body</label>
       <textarea
         placeholder="Body"
         value={body}
         onChange={(e) => setBody(e.target.value)}
         rows={6}
-        style={{ marginTop: 8, width: '100%' }}
       />
-      <br />
+      <label>Tags</label>
       <input
         placeholder="Tags (comma separated)"
         value={tagsInput}
         onChange={(e) => setTagsInput(e.target.value)}
-        style={{ marginTop: 8, width: '100%' }}
       />
-      <br />
-      <button className="btn-primary" disabled={busy || !title.trim()} onClick={handleSave} style={{ marginTop: 12 }}>
-        Save
-      </button>
-      <button disabled={busy} onClick={onCancel} style={{ marginTop: 12, marginLeft: 8 }}>
-        Cancel
-      </button>
-    </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn-primary" disabled={busy || !title.trim()} onClick={handleSave}>
+          Save
+        </button>
+        <button className="btn-secondary" disabled={busy} onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </Card>
   );
 }

@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/useAuth';
 import { api } from '@/lib/api';
 import type { DriveConnection } from '@niki/shared';
+import { AppShell } from '@/components/AppShell';
+import { Card, PageHeader } from '@/components/ui';
+import { SettingsIcon } from '@/components/icons';
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -36,23 +39,27 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="container">
-      <h1>Settings</h1>
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
-      {callbackResult === 'connected' && <p style={{ color: 'green' }}>Google Drive connected.</p>}
-      {callbackResult === 'error' && <p style={{ color: 'crimson' }}>Drive connection failed. Try again.</p>}
-
-      <h3>Google Drive</h3>
-      <p>Status: {drive?.status ?? 'loading…'}</p>
-      {drive?.status !== 'connected' && (
-        <button className="btn-primary" onClick={handleConnect}>
-          Connect Google Drive
-        </button>
+    <AppShell>
+      <PageHeader module="settings" icon={<SettingsIcon size={22} />} title="Settings" />
+      {error && (
+        <Card style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>{error}</Card>
+      )}
+      {callbackResult === 'connected' && (
+        <Card style={{ background: 'var(--color-success-bg)', color: 'var(--color-success)' }}>Google Drive connected.</Card>
+      )}
+      {callbackResult === 'error' && (
+        <Card style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>Drive connection failed. Try again.</Card>
       )}
 
-      <p style={{ marginTop: 32 }}>
-        <a href="/">Back home</a>
-      </p>
-    </div>
+      <Card style={{ maxWidth: 480 }}>
+        <h3 style={{ marginTop: 0 }}>Google Drive</h3>
+        <p>Status: {drive?.status ?? 'loading…'}</p>
+        {drive?.status !== 'connected' && (
+          <button className="btn-primary" onClick={handleConnect}>
+            Connect Google Drive
+          </button>
+        )}
+      </Card>
+    </AppShell>
   );
 }

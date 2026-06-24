@@ -5,6 +5,9 @@ import { useAuth } from '@/lib/useAuth';
 import { api } from '@/lib/api';
 import type { Family, Event, EventType, Task, EventPlanDraft, ExpenseCategory } from '@niki/shared';
 import { EVENT_TEMPLATES, EXPENSE_CATEGORIES } from '@niki/shared';
+import { AppShell } from '@/components/AppShell';
+import { Card, Badge, EmptyState, PageHeader } from '@/components/ui';
+import { EventsIcon } from '@/components/icons';
 
 /**
  * Single static route, same reason as /family and /tasks (apps/web uses
@@ -211,23 +214,27 @@ export default function EventsPage() {
   }
 
   return (
-    <div className="container">
-      <h1>Events — {family.name}</h1>
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+    <AppShell>
+      <PageHeader module="events" icon={<EventsIcon size={22} />} title="Events" subtitle={family.name} />
+      {error && (
+        <Card style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>{error}</Card>
+      )}
 
-      <ul style={{ marginTop: 16, listStyle: 'none', padding: 0 }}>
-        {events.map((ev) => (
-          <li key={ev.id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginBottom: 8 }}>
+      {events.length === 0 && (
+        <EmptyState module="events" icon={<EventsIcon size={32} />} title="No events yet" description="Plan a trip, a birthday, or any milestone below." />
+      )}
+      {events.map((ev) => (
+          <Card key={ev.id}>
             <div style={{ cursor: 'pointer' }} onClick={() => toggleExpand(ev)}>
-              <strong>{ev.title}</strong> ({ev.type})
-              <p style={{ margin: '4px 0', fontSize: '0.9em', color: '#666' }}>
+              <strong>{ev.title}</strong> <Badge module="events">{ev.type.replace('_', ' ')}</Badge>
+              <p style={{ margin: '4px 0', fontSize: 13 }}>
                 {ev.startDate}
                 {ev.endDate && ` – ${ev.endDate}`}
               </p>
             </div>
 
             {expandedId === ev.id && (
-              <div style={{ marginTop: 12, borderTop: '1px solid #eee', paddingTop: 12 }}>
+              <div style={{ marginTop: 12, borderTop: '1px solid var(--color-border)', paddingTop: 12 }}>
                 {ev.description && <p>{ev.description}</p>}
                 <h4>Linked tasks</h4>
                 <ul>
@@ -247,7 +254,7 @@ export default function EventsPage() {
                   Add task
                 </button>
 
-                <div style={{ marginTop: 16, borderTop: '1px solid #eee', paddingTop: 12 }}>
+                <div style={{ marginTop: 16, borderTop: '1px solid var(--color-border)', paddingTop: 12 }}>
                   <h4>AI plan assist</h4>
                   <button onClick={() => handlePlanAssist(ev)} disabled={planLoading}>
                     {planLoading ? 'Thinking…' : 'Get checklist + budget suggestions'}
@@ -299,53 +306,46 @@ export default function EventsPage() {
                 </div>
 
                 <br />
-                <button onClick={() => handleDelete(ev)} style={{ marginTop: 8, color: 'crimson' }}>
+                <button className="btn-danger" onClick={() => handleDelete(ev)} style={{ marginTop: 8 }}>
                   Delete event
                 </button>
               </div>
             )}
-          </li>
+          </Card>
         ))}
-        {events.length === 0 && <p>No events yet.</p>}
-      </ul>
 
-      <h3 style={{ marginTop: 32 }}>New event</h3>
-      <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-      <br />
-      <select value={type} onChange={(e) => setType(e.target.value as EventType)} style={{ marginTop: 8 }}>
-        {EVENT_TEMPLATES.map((t) => (
-          <option key={t} value={t}>
-            {t.replace('_', ' ')}
-          </option>
-        ))}
-      </select>
-      <br />
-      <label style={{ marginTop: 8, display: 'inline-block' }}>
-        Start <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-      </label>
-      <label style={{ marginLeft: 8 }}>
-        End (optional) <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-      </label>
-      <br />
-      <textarea
-        placeholder="Description (optional)"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        style={{ marginTop: 8, width: '100%', maxWidth: 400 }}
-      />
-      <br />
-      <button
-        className="btn-primary"
-        disabled={busy || !title || !startDate}
-        onClick={handleCreate}
-        style={{ marginTop: 8 }}
-      >
-        Add event
-      </button>
-
-      <p style={{ marginTop: 32 }}>
-        <a href="/">Back home</a>
-      </p>
-    </div>
+      <h3 style={{ marginTop: 32, marginBottom: 12 }}>New event</h3>
+      <Card>
+        <label>Title</label>
+        <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label>Type</label>
+        <select value={type} onChange={(e) => setType(e.target.value as EventType)}>
+          {EVENT_TEMPLATES.map((t) => (
+            <option key={t} value={t}>
+              {t.replace('_', ' ')}
+            </option>
+          ))}
+        </select>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <label style={{ flex: 1 }}>
+            Start
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          </label>
+          <label style={{ flex: 1 }}>
+            End (optional)
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          </label>
+        </div>
+        <label>Description</label>
+        <textarea
+          placeholder="Description (optional)"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+        <button className="btn-primary" disabled={busy || !title || !startDate} onClick={handleCreate}>
+          Add event
+        </button>
+      </Card>
+    </AppShell>
   );
 }

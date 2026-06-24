@@ -1,11 +1,14 @@
 import { Router } from 'express';
 import {
   CreateVaultItemInputSchema,
+  MoveVaultItemInputSchema,
   hasAtLeastRole,
+  detectSensitiveDocument,
   HARDENED_VAULT_FOLDER_TYPES,
   type VaultItem,
   type VaultAuditLogEntry,
   type VaultAuditAction,
+  type CreateVaultItemResponse,
   type Role,
 } from '@niki/shared';
 import { db } from '../lib/firebaseAdmin';
@@ -17,9 +20,10 @@ import { ApiError } from '../middleware/errorHandler';
  * Mounted at /v1/families/:familyId/vault (see index.ts) with
  * `{ mergeParams: true }` — same pattern as tasksRouter/eventsRouter.
  *
- * Per PHASES.md 1.D, this slice is intentionally list/create/delete only —
- * no update endpoint. Category is chosen at add-time in the web UI; there's
- * no separate "reassign category" flow yet.
+ * Per PHASES.md 1.D, list/create/delete is the only CRUD surface — category
+ * is chosen at add-time in the web UI, no separate "reassign category"
+ * flow. The one exception is PATCH /:itemId (added in the Phase 4.E pass
+ * below), which exists solely to change folderType.
  *
  * Vault hardening pass: items in `restricted`/`secure`/`vault` folder types
  * are gated to role >= parent (standard items remain open to any active
@@ -27,6 +31,12 @@ import { ApiError } from '../middleware/errorHandler';
  * vaultAuditLog. This is fire-and-forget (never blocks the response) but
  * always awaited internally before responding on writes, so a 201/204 means
  * the audit entry was at least attempted in the same request lifecycle.
+ *
+ * Phase 4.E (Security monitoring): sensitive-document detection on create
+ * (see detectSensitiveDocument) and the PATCH /:itemId move endpoint it
+ * feeds into. Permission review itself has no new endpoints — it's
+ * assembled in the web UI from the existing family members list + this
+ * router's /audit-log.
  */
 export const vaultRouter = Router({ mergeParams: true });
 vaultRouter.use(authenticate);
@@ -168,7 +178,56 @@ vaultRouter.post('/', async (req: VaultRequest, res, next) => {
       await writeAuditLog(familyId, item, 'create', req.uid!);
     }
 
-    return res.status(201).json(item);
+    // Sensitive-document detection (Phase 4.E): only checked for items
+    // landing in the standard tier — hardened items are already where a
+    // sensitive document belongs, nothing to suggest. Deterministic and
+    // synchronous (see detectSensitiveDocument's doc comment for why), so
+    // no latency/AI-infra dependency on the create path.
+    const suggestion =
+      item.folderType === 'standard' ? detectSensitiveDocument(item.id, item.name, item.category) ?? undefined : undefined;
+
+    const response: CreateVaultItemResponse = { item, suggestion };
+    return res.status(201).json(response);
+  } catch (err) {
+    next(err instanceof Error ? err : new ApiError(400, 'Invalid input'));
+  }
+});
+
+/**
+ * PATCH /v1/families/:familyId/vault/:itemId — the only mutable field is
+ * folderType. This exists so a member can accept a sensitive-document
+ * suggestion (or manually re-tier an item) after creation, without giving
+ * the route general update powers. Moving INTO a hardened tier requires
+ * role >= parent, same bar as creating directly into one; moving OUT of a
+ * hardened tier (back to standard) is allowed for anyone who could already
+ * view it, i.e. also role >= parent, since only parents can see hardened
+ * items in the first place.
+ */
+vaultRouter.patch('/:itemId', async (req: VaultRequest, res, next) => {
+  try {
+    const input = MoveVaultItemInputSchema.parse(req.body);
+    const familyId = req.params.familyId;
+    const itemRef = db.collection('families').doc(familyId).collection('vaultItems').doc(req.params.itemId);
+    const snap = await itemRef.get();
+    if (!snap.exists) {
+      throw new ApiError(404, 'Vault item not found');
+    }
+    const item = snap.data() as VaultItem;
+    const role = req.member!.role;
+
+    const involvesHardened = isHardened(item.folderType) || isHardened(input.folderType);
+    if (involvesHardened && !hasAtLeastRole(role, 'parent')) {
+      throw new ApiError(403, 'Requires role >= parent to move items into or out of a hardened folder');
+    }
+
+    const updated: VaultItem = { ...item, folderType: input.folderType };
+    await itemRef.set(updated);
+
+    if (isHardened(updated.folderType)) {
+      await writeAuditLog(familyId, updated, 'move', req.uid!);
+    }
+
+    return res.json(updated);
   } catch (err) {
     next(err instanceof Error ? err : new ApiError(400, 'Invalid input'));
   }

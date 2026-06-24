@@ -66,6 +66,17 @@ export const CreateVaultItemInputSchema = z.object({
 export type CreateVaultItemInput = z.infer<typeof CreateVaultItemInputSchema>;
 
 /**
+ * POST /vault response. `suggestion` is present only when the created item
+ * landed in the `standard` tier and its name/category matched a sensitive
+ * keyword (see detectSensitiveDocument below) — the web UI offers a
+ * one-time "move it?" prompt off the back of this, never auto-acted.
+ */
+export type CreateVaultItemResponse = {
+  item: VaultItem;
+  suggestion?: SensitiveDocumentSuggestion;
+};
+
+/**
  * One entry per access (view list / create / delete) against a
  * restricted/secure/vault item — never written for 'standard' items, to
  * keep this collection from growing unboundedly for everyday use. Stored at
@@ -73,7 +84,7 @@ export type CreateVaultItemInput = z.infer<typeof CreateVaultItemInputSchema>;
  * perspective (no update/delete endpoint) — an audit trail that could be
  * edited or erased isn't a trail.
  */
-export const VAULT_AUDIT_ACTIONS = ['view', 'create', 'delete'] as const;
+export const VAULT_AUDIT_ACTIONS = ['view', 'create', 'delete', 'move'] as const;
 export const VaultAuditActionSchema = z.enum(VAULT_AUDIT_ACTIONS);
 export type VaultAuditAction = z.infer<typeof VaultAuditActionSchema>;
 
@@ -88,3 +99,72 @@ export const VaultAuditLogEntrySchema = z.object({
   timestamp: z.string(),
 });
 export type VaultAuditLogEntry = z.infer<typeof VaultAuditLogEntrySchema>;
+
+/** Allows changing only the folderType of an existing item (e.g. accepting a sensitive-document suggestion, or manually re-tiering). */
+export const MoveVaultItemInputSchema = z.object({
+  folderType: VaultFolderTypeSchema,
+});
+export type MoveVaultItemInput = z.infer<typeof MoveVaultItemInputSchema>;
+
+/**
+ * Phase 4.E (Security monitoring) — sensitive-document detection.
+ * Deliberately deterministic, not LLM-based: vault item names are short
+ * (<=200 chars) and the signal is just "does this name/category suggest a
+ * sensitive document," which a keyword match handles reliably and
+ * instantly, without an AI infra dependency or the latency/cost of a model
+ * call on every vault create. This mirrors the "deterministic where
+ * possible" principle from Phase 4.C/4.D.
+ *
+ * Per explicit user scoping: this only ever *suggests* moving a newly
+ * created `standard`-tier item to a hardened tier — it never moves
+ * anything automatically. The suggestion is surfaced once, at create time;
+ * dismissing it has no persisted effect (it's not re-offered later).
+ */
+export const SensitiveDocumentSuggestionSchema = z.object({
+  vaultItemId: z.string(),
+  vaultItemName: z.string(),
+  suggestedFolderType: VaultFolderTypeSchema,
+  reason: z.string(),
+});
+export type SensitiveDocumentSuggestion = z.infer<typeof SensitiveDocumentSuggestionSchema>;
+
+/** Keyword groups, most-sensitive tier first. First match wins. */
+const SENSITIVE_KEYWORDS_BY_TIER: { folderType: VaultFolderType; keywords: string[] }[] = [
+  {
+    folderType: 'vault',
+    keywords: ['ssn', 'social security', 'passport', 'driver license', "driver's license", 'ein', 'tax id', 'birth certificate'],
+  },
+  {
+    folderType: 'secure',
+    keywords: ['bank account', 'routing number', 'credit card', 'medical record', 'prescription', 'diagnosis', 'account number'],
+  },
+  {
+    folderType: 'restricted',
+    keywords: ['insurance policy', 'will', 'trust', 'deed', 'mortgage', 'lease', 'contract', 'tax return', 'w-2', 'w2', '1099'],
+  },
+];
+
+/**
+ * Returns a suggestion if `name` (or `category`) matches a sensitive
+ * keyword, else null. Only meaningful for `standard`-tier items — callers
+ * should only invoke this for those (see apps/api/src/routes/vault.ts).
+ */
+export function detectSensitiveDocument(
+  vaultItemId: string,
+  vaultItemName: string,
+  category: VaultCategory,
+): SensitiveDocumentSuggestion | null {
+  const haystack = `${vaultItemName} ${category}`.toLowerCase();
+  for (const { folderType, keywords } of SENSITIVE_KEYWORDS_BY_TIER) {
+    const hit = keywords.find((k) => haystack.includes(k));
+    if (hit) {
+      return {
+        vaultItemId,
+        vaultItemName,
+        suggestedFolderType: folderType,
+        reason: `Name/category mentions "${hit}" — documents like this are commonly kept in the ${folderType} tier.`,
+      };
+    }
+  }
+  return null;
+}

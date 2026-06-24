@@ -3,7 +3,16 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/useAuth';
 import { api } from '@/lib/api';
-import type { Family, VaultItem, VaultCategory, VaultFolderType, VaultAuditLogEntry, DriveConnection } from '@niki/shared';
+import type {
+  Family,
+  Member,
+  VaultItem,
+  VaultCategory,
+  VaultFolderType,
+  VaultAuditLogEntry,
+  SensitiveDocumentSuggestion,
+  DriveConnection,
+} from '@niki/shared';
 import { VAULT_CATEGORIES, VAULT_FOLDER_TYPES, HARDENED_VAULT_FOLDER_TYPES, hasAtLeastRole } from '@niki/shared';
 
 /**
@@ -48,6 +57,7 @@ function loadPicker(): Promise<void> {
 export default function VaultPage() {
   const { user, loading } = useAuth();
   const [family, setFamily] = useState<Family | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
   const [canManageHardened, setCanManageHardened] = useState(false);
   const [items, setItems] = useState<VaultItem[]>([]);
   const [drive, setDrive] = useState<DriveConnection | null>(null);
@@ -61,6 +71,12 @@ export default function VaultPage() {
 
   const [auditLog, setAuditLog] = useState<VaultAuditLogEntry[] | null>(null);
   const [auditLoading, setAuditLoading] = useState(false);
+
+  // Phase 4.E: sensitive-document detection surfaces at most one suggestion
+  // at a time, right after the create that triggered it. Dismissing or
+  // acting on it clears it — it is never re-offered for the same item.
+  const [suggestion, setSuggestion] = useState<SensitiveDocumentSuggestion | null>(null);
+  const [movingItem, setMovingItem] = useState(false);
 
   async function loadItems(familyId: string, category?: VaultCategory, folderType?: VaultFolderType) {
     const result = await api.vault.list(familyId, { category: category || undefined, folderType: folderType || undefined });
@@ -82,6 +98,7 @@ export default function VaultPage() {
           api.drive.status(),
         ]);
         setFamily(familyResult.family);
+        setMembers(familyResult.members);
         setDrive(driveStatus);
         const me = familyResult.members.find((m) => m.uid === user.uid);
         setCanManageHardened(me ? hasAtLeastRole(me.role, 'parent') : false);
@@ -155,13 +172,14 @@ export default function VaultPage() {
           }
           const doc = data.docs[0];
           try {
-            await api.vault.create(family.id, {
+            const { suggestion: newSuggestion } = await api.vault.create(family.id, {
               name: doc.name,
               driveFileId: doc.id,
               driveFileUrl: doc.url,
               category: pickerCategory,
               folderType: pickerFolderType,
             });
+            setSuggestion(newSuggestion ?? null);
             await loadItems(family.id, filter || undefined, folderFilter || undefined);
           } catch (e) {
             setError(e instanceof Error ? e.message : 'Failed to save vault item');
@@ -188,6 +206,25 @@ export default function VaultPage() {
     }
   }
 
+  async function handleAcceptSuggestion() {
+    if (!family || !suggestion) return;
+    setMovingItem(true);
+    setError(null);
+    try {
+      await api.vault.move(family.id, suggestion.vaultItemId, { folderType: suggestion.suggestedFolderType });
+      setSuggestion(null);
+      await loadItems(family.id, filter || undefined, folderFilter || undefined);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to move vault item');
+    } finally {
+      setMovingItem(false);
+    }
+  }
+
+  function handleDismissSuggestion() {
+    setSuggestion(null);
+  }
+
   if (loading || loadingData) {
     return <div className="container">Loading…</div>;
   }
@@ -204,6 +241,29 @@ export default function VaultPage() {
     <div className="container">
       <h1>Vault — {family.name}</h1>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
+
+      {suggestion && (
+        <div
+          style={{
+            border: '1px solid #f0c36d',
+            background: '#fff8e6',
+            borderRadius: 8,
+            padding: 12,
+            marginTop: 16,
+          }}
+        >
+          <p style={{ margin: '0 0 8px' }}>
+            <strong>{suggestion.vaultItemName}</strong> looks sensitive. {suggestion.reason} Move it to the{' '}
+            <strong>{suggestion.suggestedFolderType}</strong> folder?
+          </p>
+          <button onClick={handleAcceptSuggestion} disabled={movingItem} style={{ marginRight: 8 }}>
+            {movingItem ? 'Moving…' : `Move to ${suggestion.suggestedFolderType}`}
+          </button>
+          <button onClick={handleDismissSuggestion} disabled={movingItem}>
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {!driveConnected && (
         <p>
@@ -301,6 +361,53 @@ export default function VaultPage() {
 
       {canManageHardened && (
         <div style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginTop: 32, maxWidth: 640 }}>
+          <h3 style={{ marginTop: 0 }}>Permission review</h3>
+          <p style={{ color: '#666', fontSize: '0.9em', margin: '4px 0 8px' }}>
+            These members can view, add to, and delete from restricted/secure/vault folders.
+          </p>
+          <ul style={{ margin: '8px 0', paddingLeft: 20 }}>
+            {members
+              .filter((m) => hasAtLeastRole(m.role, 'parent'))
+              .map((m) => (
+                <li key={m.uid} style={{ fontSize: '0.9em' }}>
+                  {m.displayName} ({m.role}){m.uid === user.uid ? ' — you' : ''}
+                </li>
+              ))}
+          </ul>
+          {auditLog && (
+            <>
+              <p style={{ color: '#666', fontSize: '0.9em', margin: '8px 0 4px' }}>
+                Recent hardened-vault activity, by member (from the {auditLog.length} entries loaded below):
+              </p>
+              <ul style={{ margin: '4px 0', paddingLeft: 20 }}>
+                {Object.entries(
+                  auditLog.reduce<Record<string, number>>((acc, entry) => {
+                    acc[entry.actorUid] = (acc[entry.actorUid] ?? 0) + 1;
+                    return acc;
+                  }, {}),
+                ).map(([uid, count]) => {
+                  const m = members.find((mm) => mm.uid === uid);
+                  return (
+                    <li key={uid} style={{ fontSize: '0.9em' }}>
+                      {m ? m.displayName : uid}
+                      {uid === user.uid ? ' (you)' : ''}: {count} action{count === 1 ? '' : 's'}
+                    </li>
+                  );
+                })}
+                {auditLog.length === 0 && <li style={{ fontSize: '0.9em' }}>No activity yet.</li>}
+              </ul>
+            </>
+          )}
+          {!auditLog && (
+            <p style={{ color: '#888', fontSize: '0.85em', margin: '8px 0 0' }}>
+              Load the audit log below to see a recent-activity rollup here.
+            </p>
+          )}
+        </div>
+      )}
+
+      {canManageHardened && (
+        <div style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginTop: 16, maxWidth: 640 }}>
           <h3 style={{ marginTop: 0 }}>Audit log</h3>
           <p style={{ color: '#666', fontSize: '0.9em', margin: '4px 0 8px' }}>
             Every view/create/delete against restricted, secure, or vault items — most recent first.

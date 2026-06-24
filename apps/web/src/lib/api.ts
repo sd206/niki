@@ -24,6 +24,8 @@ import type {
   UpdateEventInput,
   VaultItem,
   CreateVaultItemInput,
+  CreateVaultItemResponse,
+  MoveVaultItemInput,
   VaultCategory,
   VaultFolderType,
   VaultAuditLogEntry,
@@ -142,11 +144,13 @@ export const api = {
       return request<VaultItem[]>('GET', `/families/${familyId}/vault${qs ? `?${qs}` : ''}`);
     },
     create: (familyId: string, input: CreateVaultItemInput) =>
-      request<VaultItem>('POST', `/families/${familyId}/vault`, input),
+      request<CreateVaultItemResponse>('POST', `/families/${familyId}/vault`, input),
     remove: (familyId: string, itemId: string) =>
       request<void>('DELETE', `/families/${familyId}/vault/${itemId}`),
     auditLog: (familyId: string) =>
       request<VaultAuditLogEntry[]>('GET', `/families/${familyId}/vault/audit-log`),
+    move: (familyId: string, itemId: string, input: MoveVaultItemInput) =>
+      request<VaultItem>('PATCH', `/families/${familyId}/vault/${itemId}`, input),
   },
   calendar: {
     range: (familyId: string, from: string, to: string) =>

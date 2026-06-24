@@ -488,12 +488,53 @@ option.
   list (content-type + tag filters, "Generate digest" button, shows
   summary/entryCount/highlights). `apps/web/src/app/knowledge/page.tsx`.
 
-### 4.E — Security monitoring
+### 4.E — Security monitoring (SHIPPED)
 
 Permission review, sensitive-document detection — depends on Vault's
 security tiers, which the Vault hardening pass (see Phase 1 section above)
-has now shipped: `restricted`/`secure`/`vault` folder tiers, role gating,
-and the `vaultAuditLog` this phase will read.
+shipped: `restricted`/`secure`/`vault` folder tiers, role gating, and the
+`vaultAuditLog` this phase reads. Scoped with the user via two explicit
+questions: detection should **suggest, never auto-move**; permission review
+means a **parent-facing access summary** (who has access + a recent-activity
+rollup), not automated stale-access alerts.
+
+- **Design decision (locked in): sensitive-document detection is
+  deterministic, not LLM-based.** Vault item names are short (<=200 chars)
+  and the signal is just "does this name/category suggest a sensitive
+  document" — a keyword match handles that reliably and instantly, with no
+  AI-infra dependency or latency/cost on the vault-create path. Same
+  "deterministic where possible" principle as 4.C/4.D.
+- **Data model** (`packages/shared/src/vault.ts`): `CreateVaultItemResponse`
+  (`{ item, suggestion? }`) — `suggestion` is only present when a newly
+  created `standard`-tier item's name/category matches a keyword.
+  `SensitiveDocumentSuggestion` (vaultItemId, vaultItemName,
+  suggestedFolderType, reason). `detectSensitiveDocument()` checks three
+  keyword tiers (most-sensitive first: `vault` — ssn/passport/driver
+  license/ein/tax id/birth certificate; `secure` — bank account/routing
+  number/credit card/medical record/prescription/diagnosis/account number;
+  `restricted` — insurance policy/will/trust/deed/mortgage/lease/contract/
+  tax return/w-2/1099), first match wins. Only ever called for `standard`-
+  tier creates — hardened items are already where a sensitive document
+  belongs. `MoveVaultItemInput` (`{ folderType }`) and a new `'move'`
+  `VaultAuditAction` (alongside view/create/delete).
+- **API** (`apps/api/src/routes/vault.ts`): `POST /` now computes the
+  suggestion (if any) and returns it alongside the created item. New
+  `PATCH /:itemId` — the only mutable field is `folderType`, so a member can
+  accept a suggestion (or manually re-tier an item) without a general update
+  endpoint. Moving into or out of a hardened tier both require role >=
+  parent. Writes a `'move'` audit entry when the resulting folderType is
+  hardened.
+- **Permission review has no new API surface** — assembled entirely
+  client-side from data already available: the family members list
+  (filtered to role >= parent) plus the existing `GET /audit-log` response,
+  aggregated into a per-actor activity count.
+- **Web UI** (`apps/web/src/app/vault/page.tsx`): a one-time suggestion
+  banner after "Add from Drive" creates a flagged item ("X looks sensitive
+  — move it to the Y folder?" with Move/Dismiss buttons; dismissing has no
+  persisted effect, it's not re-offered). A parent-only "Permission review"
+  panel above the audit log: lists members with access to hardened tiers,
+  and — once the audit log is loaded — a per-member recent-activity count
+  rollup.
 
 ---
 

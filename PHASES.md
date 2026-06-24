@@ -269,13 +269,21 @@ the result afterward.
 - **Incidental fix, unrelated to design work**: `packages/shared/dist/`
   was stale — missing `ReceiptExtraction`, `VoiceExpenseDraft`,
   `ExtractReceiptInput`, `TranscribeVoiceInput` (added to `src/ai.ts` back
-  in Phase 2.B.2/2.B.3, tasks #108-112, but never rebuilt). `npm run build`
-  in `packages/shared` fails in this sandbox (`tsup`/`rollup` dependency
-  chain `MODULE_NOT_FOUND`), so the four missing exports were patched
-  directly into `dist/ai.js` and `dist/ai.d.ts` by hand rather than via the
-  build tool. **Run `npm run build` for real in `packages/shared` the next
-  time the toolchain works**, to replace this manual patch with a proper
-  build output.
+  in Phase 2.B.2/2.B.3, tasks #108-112, but never rebuilt). Initially
+  patched the four exports into `dist/ai.js`/`dist/ai.d.ts` by hand as a
+  stopgap; root cause turned out to be a platform mismatch —
+  `node_modules` was installed on Windows, so the Linux sandbox was
+  missing the `@esbuild/linux-x64` native binary and
+  `@jridgewell/sourcemap-codec` (a `tsup`/`rollup` transitive dep), causing
+  `MODULE_NOT_FOUND`. Fetched both packages' tarballs directly from the npm
+  registry and extracted them into `node_modules`, after which `npm run
+  build` in `packages/shared` succeeded for real — `dist/index.{js,mjs,d.ts,d.mts}`
+  are now genuine `tsup` output, not hand-edited. Note: `dist/` still has
+  orphaned per-module files (`ai.js`, `calendar.d.ts`, etc.) from an older
+  build layout — unreferenced by the current bundled `index.*` output, but
+  the sandbox's mount blocks file deletion, so they weren't cleaned up;
+  safe to `rm -rf packages/shared/dist && npm run build` from a normal
+  machine if you want a pristine output dir.
   request body — `apps/api/src/routes/{budgets,expenses,savingsGoals}.ts`
 - **Web UI**: `/finance` — budget dashboard (per-category spent-vs-allocated),
   expense list/entry form, savings goal tracker with contributions —
